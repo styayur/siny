@@ -208,6 +208,61 @@ mod tests {
         fn unload(&mut self) {}
     }
     #[test]
+    fn cancelled_native_result_is_discarded_and_worker_recovers() {
+        struct Slow {
+            started: std::sync::mpsc::Sender<()>,
+            release: std::sync::mpsc::Receiver<()>,
+            first: bool,
+        }
+        impl Backend for Slow {
+            fn recognize(&mut self, _: &Audio, _: &Cancel) -> Result<String> {
+                Ok("hello".into())
+            }
+            fn synthesize(&mut self, _: &str, _: &Cancel) -> Result<Audio> {
+                if self.first {
+                    self.first = false;
+                    self.started.send(()).unwrap();
+                    self.release.recv_timeout(Duration::from_secs(2)).unwrap();
+                }
+                Ok(Audio {
+                    samples: vec![0.1; 160],
+                    sample_rate: 16000,
+                })
+            }
+            fn unload(&mut self) {}
+        }
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let worker = Scheduler::new(
+            Slow {
+                started: started_tx,
+                release: release_rx,
+                first: true,
+            },
+            Settings::default(),
+        )
+        .unwrap();
+        let cancelled = worker.submit(Operation::Read("first".into())).unwrap();
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        cancelled.cancel();
+        release_tx.send(()).unwrap();
+        assert_eq!(
+            cancelled
+                .result
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap_err(),
+            "Cancelled"
+        );
+        let recovered = worker.submit(Operation::Read("second".into())).unwrap();
+        assert!(recovered
+            .result
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .is_ok());
+    }
+
+    #[test]
     fn workflows_validate_and_recover() {
         let worker = Scheduler::new(Echo, Settings::default()).unwrap();
         assert!(worker.submit(Operation::Read(String::new())).is_err());

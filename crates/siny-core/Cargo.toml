@@ -6,4 +6,3 @@ license = "AGPL-3.0-only"
 [dependencies]
 serde.workspace = true
 toml.workspace = true
-thiserror.workspace = true

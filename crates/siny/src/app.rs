@@ -33,13 +33,13 @@ pub struct SinyApp {
 impl SinyApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::light());
-        let mut style = (*cc.egui_ctx.style()).clone();
+        let mut style = (*cc.egui_ctx.style_of(egui::Theme::Light)).clone();
         style.spacing.item_spacing = egui::vec2(12.0, 12.0);
         style.spacing.interact_size.y = 40.0;
         style
             .text_styles
             .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
-        cc.egui_ctx.set_style(style);
+        cc.egui_ctx.set_style_of(egui::Theme::Light, style);
         let base = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(PathBuf::from))

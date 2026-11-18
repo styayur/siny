@@ -89,3 +89,29 @@ impl Settings {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn save_preserves_existing_temp_file_and_roundtrips() {
+        let dir = std::env::temp_dir().join(format!("siny-settings-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("siny.toml");
+        let temp = path.with_extension(format!("{}.tmp", std::process::id()));
+        std::fs::write(&temp, "existing file").unwrap();
+        assert!(Settings::default().save(&path).is_err());
+        assert_eq!(std::fs::read_to_string(&temp).unwrap(), "existing file");
+        std::fs::remove_file(&temp).unwrap();
+        Settings::default().save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap().threads, 2);
+        let invalid = Settings {
+            threads: 99,
+            ..Settings::default()
+        };
+        assert!(invalid.save(&path).is_err());
+        assert_eq!(Settings::load(&path).unwrap().threads, 2);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+    }
+}
