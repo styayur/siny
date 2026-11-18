@@ -67,12 +67,12 @@ impl Settings {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let temp = path.with_extension(format!("{}.tmp", std::process::id()));
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|e| e.to_string())?;
         let result = (|| {
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temp)
-                .map_err(|e| e.to_string())?;
             file.write_all(
                 toml::to_string_pretty(self)
                     .map_err(|e| e.to_string())?

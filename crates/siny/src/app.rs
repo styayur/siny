@@ -152,7 +152,9 @@ impl SinyApp {
                     }
                     match result {
                         Ok(outcome) => {
-                            self.text = outcome.text;
+                            if !outcome.text.is_empty() {
+                                self.text = outcome.text;
+                            }
                             self.status =
                                 format!("Completed locally in {:.2} s", outcome.elapsed_seconds);
                             self.reverse = outcome
