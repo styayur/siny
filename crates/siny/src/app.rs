@@ -222,11 +222,12 @@ fn make_scheduler(base: &std::path::Path, settings: &Settings) -> siny_core::Res
     )
 }
 impl eframe::App for SinyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, root_ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = root_ui.ctx().clone();
         self.poll();
         // Native hotkeys are polled at 10 Hz; no per-frame inference or idle model loading.
         ctx.request_repaint_after(Duration::from_millis(100));
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(root_ui, |ui| {
             ui.horizontal(|ui| { ui.heading(egui::RichText::new("Siny").size(28.0)); ui.label("LISTEN  →  TEXT  →  SPEAK"); });
             ui.label("Offline speech, one place for both directions.");
             ui.add_space(4.0);

@@ -195,7 +195,7 @@ fn build_stream(
             let callback_events = event_tx.clone();
             let mut resampler = StreamingResampler::new(input_rate, TARGET_SAMPLE_RATE)?;
             device.build_input_stream(
-                config,
+                config.clone(),
                 move |data: &[$sample], _| {
                     if let Ok(mut target) = callback_buffer.try_lock() {
                         let mono = downmix_interleaved(data, channels);
