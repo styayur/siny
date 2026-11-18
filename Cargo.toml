@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/tinystt", "crates/tinytts", "crates/siny-core", "crates/siny"]
+default-members = ["crates/siny"]
+exclude = ["third-party/sherpa-onnx-sys"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1.1"
+thiserror = "2"
+sherpa-onnx = "=1.13.8"
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow", "links", "system_fonts", "wayland", "web_screen_reader", "x11"] }
+rodio = "0.23"
+cpal = "0.18.2"
+
+[patch.crates-io]
+sherpa-onnx-sys = { path = "third-party/sherpa-onnx-sys" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

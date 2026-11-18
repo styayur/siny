@@ -1,0 +1,36 @@
+# Acceptance and migration gate
+
+Status: PARTIAL — implementation and real execution in progress. CI success is not itself
+proof of real microphone, output-device, shortcut or GUI acceptance.
+
+Required before replacement/archival: actual SenseVoice sample inference, Kokoro English,
+Chinese, speed/voice coverage, unknown-word regression, reverse verification, cancellation,
+recovery, microphone capture, playback pause/resume/stop, clipboard/hotkeys, resource and
+licence inventory. Run the CI probes against the exact release SHA. Keep model/audio inputs
+local; publish numerical reports and hashes only.
+
+Compatibility gaps against legacy apps: tray controls, optional auto-paste, debug recording
+export, full voice-name selector, unlimited long-text queue, live settings for language and
+terminology, old-config import. These are not asserted as complete. Original repositories
+stay open; migrate no issues and perform no archival until these decisions and acceptance
+are resolved. Neither repository currently has an open user issue to transfer.
+
+## DSP evaluation
+
+Push-to-talk bounds capture to 60 seconds. Neural VAD would add a model/load/RAM cost and
+has not demonstrated a measured benefit; no VAD accuracy or latency improvement is claimed.
+Recording stops playback (half-duplex), avoiding speaker feedback and the compute/latency
+cost of AEC; simultaneous conversation / AEC remains deferred until a measured echo fixture
+exists. Resampling is needed for actual device rates and 24 kHz TTS reverse recognition.
+SenseVoice receives the actual synthesis sample rate through sherpa's native resampler.
+The inherited microphone path uses linear interpolation; it is inexpensive but is not an
+anti-alias filter. Spectral aliasing and a proper low-pass replacement require evaluation.
+No claim that ASR and TTS model weights can be merged is made. Shared terminology is a text
+transform, and reverse recognition is an explicit diagnostic vulnerable to correlated errors.
+
+## Design decisions
+
+Desktop reader/dictator, one editable transcript, Listen → Text → Speak strip, adjacent
+record/read actions, visible reverse transcript. Neutral paper/graphite and blue focus use
+the inherited egui 0.37 accessible controls, 4 px spacing base and 40 px action height.
+No dashboard cards, animations or chat bubbles. Real window inspection is required.

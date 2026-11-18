@@ -1,0 +1,12 @@
+/target/
+/.native/
+/.test-model/
+/work/
+/dist/
+__pycache__/
+*.pyc
+/models/
+/config/
+/logs/
+
+/work-*.json

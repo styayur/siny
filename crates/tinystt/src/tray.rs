@@ -7,7 +7,7 @@ pub enum TrayAction {
     Exit,
 }
 
-#[cfg(all(windows, feature = "native"))]
+#[cfg(all(windows, feature = "gui"))]
 mod platform {
     use super::TrayAction;
     use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
@@ -111,7 +111,7 @@ mod platform {
         Icon::from_rgba(rgba, SIZE, SIZE)
     }
 }
-#[cfg(not(all(windows, feature = "native")))]
+#[cfg(not(all(windows, feature = "gui")))]
 mod platform {
     use super::TrayAction;
 
