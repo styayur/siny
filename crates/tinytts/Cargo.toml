@@ -1,0 +1,56 @@
+[package]
+name = "tinytts"
+version = "0.1.0"
+edition = "2021"
+description = "Tiny, offline text-to-speech for Windows (Kokoro + sherpa-onnx)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/styayur/TinyTTS"
+readme = "README.md"
+
+[[bin]]
+name = "TinyTTS"
+path = "src/main.rs"
+
+[[example]]
+name = "native_model_acceptance"
+required-features = ["native"]
+
+[patch.crates-io]
+# Build-dependency-only security backport; native 1.13.8 ABI is unchanged.
+sherpa-onnx-sys = { path = "third-party/sherpa-onnx-sys" }
+
+[features]
+default = ["native"]
+# The `native` feature pulls in the GUI and TTS runtime. Disable it to run the
+# dependency-light core unit tests without a C toolchain or the sherpa-onnx
+# native library:
+#
+#     cargo test --no-default-features
+native = ["dep:sherpa-onnx", "dep:eframe", "dep:rodio", "dep:rfd", "dep:windows-sys"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1.1"
+thiserror = "2"
+sherpa-onnx = { version = "1.13.8", optional = true }
+# Keep the existing OpenGL renderer; 0.37 changes its default to WGPU.
+eframe = { version = "0.37", optional = true, default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow", "links", "system_fonts", "wayland", "web_screen_reader", "x11"] }
+rodio = { version = "0.23", optional = true }
+rfd = { version = "0.17", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
