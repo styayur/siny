@@ -35,6 +35,13 @@
       "name": "onnxruntime-windows-input",
       "url": "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.28.2/onnxruntime-win-x64-static_lib-MT-Release-1.28.2.tar.bz2",
       "sha256": "77c6cc2a419828f450a570851d7d6d2385523c411dbe858f841a4c7338a78881"
+    },
+    {
+      "name": "onnxruntime-source",
+      "url": "https://codeload.github.com/microsoft/onnxruntime/tar.gz/refs/tags/v1.28.2",
+      "source_ref": "v1.28.2",
+      "repository": "https://github.com/microsoft/onnxruntime",
+      "required_for_release": true
     }
   ]
 }

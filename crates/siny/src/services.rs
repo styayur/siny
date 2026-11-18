@@ -7,17 +7,10 @@ use tinystt::{
 };
 use tinytts::audio::player::Player;
 
+#[derive(Default)]
 pub struct Devices {
     pub recording: Option<AudioCapture>,
     pub player: Option<Player>,
-}
-impl Default for Devices {
-    fn default() -> Self {
-        Self {
-            recording: None,
-            player: None,
-        }
-    }
 }
 impl Devices {
     pub fn record(&mut self, microphone: &str) -> Result<()> {
