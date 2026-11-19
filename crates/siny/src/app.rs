@@ -56,7 +56,7 @@ impl SinyApp {
         } else {
             None
         };
-        let shortcuts = Shortcuts::register();
+        let shortcuts = Shortcuts::register(cc.egui_ctx.clone());
         let status = match &shortcuts {
             Ok(_) => status,
             Err(e) => format!("{status} · shortcuts: {e}"),
@@ -185,19 +185,12 @@ impl SinyApp {
                 }
             }
         }
-        let dictation = self.shortcuts.as_ref().and_then(|s| s.dictation.try_recv());
-        match dictation {
-            Some(tinystt::hotkey::HotkeyEvent::Pressed) => self.record(),
-            Some(tinystt::hotkey::HotkeyEvent::Released) => self.finish(),
-            _ => (),
-        }
-        if self
-            .shortcuts
-            .as_ref()
-            .and_then(|s| s.reading.try_recv())
-            .is_some()
-        {
-            self.clipboard_read();
+        while let Some(event) = self.shortcuts.as_ref().and_then(Shortcuts::poll) {
+            match event {
+                services::ShortcutEvent::DictationPressed => self.record(),
+                services::ShortcutEvent::DictationReleased => self.finish(),
+                services::ShortcutEvent::ReadClipboard => self.clipboard_read(),
+            }
         }
         if let Some(capture) = &self.devices.recording {
             if let Some(event) = capture.poll_event() {
@@ -225,9 +218,12 @@ impl eframe::App for SinyApp {
     fn ui(&mut self, root_ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = root_ui.ctx().clone();
         self.poll();
-        // Native hotkeys are polled at 10 Hz; no per-frame inference or idle model loading.
-        ctx.request_repaint_after(Duration::from_millis(100));
+        // Shortcuts wake egui directly. Idle windows do not redraw on a timer.
+        if self.job.is_some() || self.devices.recording.is_some() || self.devices.player.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
         egui::CentralPanel::default().show(root_ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
             ui.horizontal(|ui| { ui.heading(egui::RichText::new("Siny").size(28.0)); ui.label("LISTEN  →  TEXT  →  SPEAK"); });
             ui.label("Offline speech, one place for both directions.");
             ui.add_space(4.0);
@@ -283,6 +279,7 @@ impl eframe::App for SinyApp {
             ui.add_space(4.0);
             ui.small("Siny contributors · no warranty · AGPL-3.0-only; TinyTTS portions GPL-3.0-or-later.");
             ui.hyperlink_to("Source & licences", "https://github.com/styayur/siny");
+            });
         });
     }
 }
