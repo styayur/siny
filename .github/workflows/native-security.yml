@@ -1,0 +1,61 @@
+name: Native runtime security rebuild
+on:
+  push:
+    branches: [codex/siny-unified-runtime]
+    paths: ['.github/workflows/native-security.yml', 'scripts/native-security-build.ps1']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-security-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-security:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: csukuangfj/onnxruntime-build
+          ref: 23ec55ae5db21fb82be6c0f8a19365699137ecb7
+          path: .native-build/helper
+      - uses: actions/checkout@v4
+        with:
+          repository: ossia/onnxruntime
+          ref: 0d68ff6b3b72b04aac578decd6c4c45d322bb962
+          path: .native-build/helper/onnxruntime
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build patched implementation, preserve sherpa 1.13.8 ABI
+        run: ./scripts/native-security-build.ps1
+      - name: Prepare reviewed models
+        run: |
+          python scripts/prepare_model.py --github-env
+          python scripts/prepare_sensevoice.py --github-env
+      - name: Actual model compatibility on the rebuilt native runtime
+        env:
+          SINY_EXPECT_ORT_VERSION: 1.28.3
+        run: |
+          cargo build --locked --release -p siny --example acceptance
+          cargo build --locked --release -p tinytts --example native_model_acceptance
+          python scripts/check_acceptance.py
+      - name: Retain source and build provenance
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force work/native-security | Out-Null
+          git -C .native-build/helper/onnxruntime rev-parse HEAD | Set-Content work/native-security/ort-commit.txt
+          git -C .native-build/helper rev-parse HEAD | Set-Content work/native-security/helper-commit.txt
+          if (Test-Path .native-build/build/CMakeCache.txt) { Copy-Item .native-build/build/CMakeCache.txt work/native-security/ }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-security-evidence
+          path: |
+            work/native-security/
+            work/acceptance/
+            work/model-acceptance/native-report.toml
+          if-no-files-found: warn

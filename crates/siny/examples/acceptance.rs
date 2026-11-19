@@ -29,7 +29,28 @@ struct Report {
     recovered: bool,
     cases: Vec<Case>,
 }
+#[repr(C)]
+struct OrtApiBase {
+    get_api: unsafe extern "system" fn(u32) -> *const std::ffi::c_void,
+    version: unsafe extern "system" fn() -> *const std::ffi::c_char,
+}
+extern "system" {
+    fn OrtGetApiBase() -> *const OrtApiBase;
+}
+fn runtime_version() -> String {
+    // Stable ORT C API base layout; no borrowed pointer escapes the call.
+    unsafe {
+        std::ffi::CStr::from_ptr(((*OrtGetApiBase()).version)())
+            .to_string_lossy()
+            .into_owned()
+    }
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = runtime_version();
+    println!("LINKED_ORT_VERSION={runtime}");
+    if let Ok(expected) = std::env::var("SINY_EXPECT_ORT_VERSION") {
+        assert_eq!(runtime, expected);
+    }
     // Known 12 kHz input aliases at 4 kHz after 48 -> 16 kHz linear decimation.
     // Compare that deterministic fixture with the production native low-pass path.
     let signal: Vec<f32> = (0..48000)
