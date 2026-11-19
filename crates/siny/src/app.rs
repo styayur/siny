@@ -11,6 +11,7 @@
 use crate::{
     backend::SherpaBackend,
     services::{self, Devices, PasteTarget, Shortcuts},
+    tray::{SystemTray, TrayAction},
 };
 use eframe::egui;
 use siny_core::{Audio, Job, Operation, Scheduler, Settings};
@@ -32,6 +33,10 @@ pub struct SinyApp {
     show_settings: bool,
     dictation_delivery: bool,
     paste_target: Option<PasteTarget>,
+    tray: Option<SystemTray>,
+    shortcuts_enabled: bool,
+    allow_exit: bool,
+    hidden: bool,
 }
 impl SinyApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -64,6 +69,12 @@ impl SinyApp {
             Ok(_) => status,
             Err(e) => format!("{status} · shortcuts: {e}"),
         };
+        let shortcuts_enabled = shortcuts.is_ok();
+        let tray = SystemTray::new(shortcuts_enabled, cc.egui_ctx.clone());
+        let status = match &tray {
+            Ok(_) => status,
+            Err(error) => format!("{status} · tray unavailable: {error}; Close exits"),
+        };
         Self {
             base,
             applied_settings: settings.clone(),
@@ -80,6 +91,10 @@ impl SinyApp {
             show_settings: false,
             dictation_delivery: false,
             paste_target: None,
+            tray: tray.ok(),
+            shortcuts_enabled,
+            allow_exit: false,
+            hidden: false,
         }
     }
     fn submit(&mut self, operation: Operation) {
@@ -254,7 +269,11 @@ impl SinyApp {
             self.settings.hotkey = spec.display;
             let scheduler = make_scheduler(&self.base, &self.settings)?;
             self.shortcuts = None; // Join the registration owner so old handles are released first.
-            let shortcuts = Shortcuts::register(ctx.clone(), &self.settings.hotkey)?;
+            let shortcuts = if self.shortcuts_enabled {
+                Some(Shortcuts::register(ctx.clone(), &self.settings.hotkey)?)
+            } else {
+                None
+            };
             self.settings.save(&self.base.join("config/siny.toml"))?;
             Ok((scheduler, shortcuts))
         })();
@@ -262,12 +281,12 @@ impl SinyApp {
             Ok((scheduler, shortcuts)) => {
                 self.devices.stop_playback();
                 self.scheduler = Some(scheduler);
-                self.shortcuts = Some(shortcuts);
+                self.shortcuts = shortcuts;
                 self.applied_settings = self.settings.clone();
                 self.status = "Settings saved and applied · models load on demand".into();
             }
             Err(error) => {
-                if self.shortcuts.is_none() {
+                if self.shortcuts_enabled && self.shortcuts.is_none() {
                     self.shortcuts =
                         Shortcuts::register(ctx.clone(), &self.applied_settings.hotkey).ok();
                 }
@@ -290,6 +309,42 @@ impl SinyApp {
             }
         }
     }
+
+    fn hide_to_tray(&mut self, ctx: &egui::Context) {
+        if self.tray.is_some() {
+            self.hidden = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
+    }
+
+    fn toggle_shortcuts(&mut self, ctx: &egui::Context) {
+        if self.shortcuts_enabled {
+            if self.devices.recording.is_some() {
+                self.stop();
+            }
+            self.shortcuts = None;
+            self.shortcuts_enabled = false;
+            self.status = "Global shortcuts disabled · desktop buttons remain available".into();
+        } else {
+            match Shortcuts::register(ctx.clone(), &self.applied_settings.hotkey) {
+                Ok(shortcuts) => {
+                    self.shortcuts = Some(shortcuts);
+                    self.shortcuts_enabled = true;
+                    self.status = "Global shortcuts enabled".into();
+                }
+                Err(error) => self.status = format!("Shortcuts unavailable: {error}"),
+            }
+        }
+        if let Some(tray) = &self.tray {
+            tray.set_enabled(self.shortcuts_enabled);
+        }
+    }
+
+    fn exit(&mut self, ctx: &egui::Context) {
+        self.stop();
+        self.allow_exit = true;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
 }
 fn make_scheduler(base: &std::path::Path, settings: &Settings) -> siny_core::Result<Scheduler> {
     Scheduler::new(
@@ -298,13 +353,39 @@ fn make_scheduler(base: &std::path::Path, settings: &Settings) -> siny_core::Res
     )
 }
 impl eframe::App for SinyApp {
-    fn ui(&mut self, root_ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = root_ui.ctx().clone();
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // eframe 0.37 calls logic while hidden; ui is not called for an invisible tray window.
+        // Ignore the previous shown frame's stale close request while hidden.
+        if !self.hidden
+            && !self.allow_exit
+            && self.applied_settings.close_to_tray
+            && self.tray.is_some()
+            && ctx.input(|input| input.viewport().close_requested())
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.hide_to_tray(ctx);
+        }
+        while let Some(action) = self.tray.as_ref().and_then(SystemTray::poll) {
+            match action {
+                TrayAction::Open => {
+                    self.hidden = false;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                TrayAction::ToggleShortcuts => self.toggle_shortcuts(ctx),
+                TrayAction::Stop => self.stop(),
+                TrayAction::Exit => self.exit(ctx),
+            }
+        }
         self.poll();
         // Shortcuts wake egui directly. Idle windows do not redraw on a timer.
         if self.job.is_some() || self.devices.recording.is_some() || self.devices.player.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
+    }
+    fn ui(&mut self, root_ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = root_ui.ctx().clone();
         egui::CentralPanel::default().show(root_ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
             ui.horizontal(|ui| { ui.heading(egui::RichText::new("Siny").size(28.0)); ui.label("LISTEN  →  TEXT  →  SPEAK"); });
@@ -338,6 +419,8 @@ impl eframe::App for SinyApp {
                 }
                 if ui.add_enabled(idle, egui::Button::new("Unload models")).clicked() { self.last_audio = None; self.submit(Operation::Unload); }
                 ui.toggle_value(&mut self.show_settings, "Settings & models");
+                if ui.add_enabled(self.tray.is_some(), egui::Button::new("Hide to tray")).clicked() { self.hide_to_tray(&ctx); }
+                if ui.button("Exit Siny").clicked() { self.exit(&ctx); }
             });
             ui.label(egui::RichText::new(&self.status).strong());
             if self.show_settings {
@@ -348,6 +431,8 @@ impl eframe::App for SinyApp {
                 ui.horizontal(|ui| { ui.label("Microphone (blank = default)"); ui.text_edit_singleline(&mut self.settings.microphone); });
                 ui.horizontal(|ui| { ui.label("Dictation shortcut"); ui.text_edit_singleline(&mut self.settings.hotkey); });
                 ui.checkbox(&mut self.settings.auto_paste, "Paste dictation into its original foreground application (off by default)");
+                ui.checkbox(&mut self.settings.close_to_tray, "Close keeps Siny in the system tray (use Exit Siny to quit)");
+                if ui.button(if self.shortcuts_enabled { "Disable global shortcuts" } else { "Enable global shortcuts" }).clicked() { self.toggle_shortcuts(&ctx); }
                 ui.label("Dictation is copied automatically. Paste is skipped if focus changes or the destination is Siny.");
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Recognition language");

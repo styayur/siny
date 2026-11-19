@@ -7,10 +7,11 @@ repository = "https://github.com/styayur/siny"
 [features]
 default = ["gui"]
 sherpa = ["tinystt/native", "tinytts/native", "dep:sherpa-onnx", "dep:windows-sys"]
-gui = ["sherpa", "dep:eframe", "dep:rfd"]
+gui = ["sherpa", "dep:eframe", "dep:rfd", "dep:tray-icon"]
 [dependencies]
 sherpa-onnx = { workspace = true, optional = true }
 rfd = { version = "0.17", optional = true }
+tray-icon = { version = "0.26", default-features = false, optional = true }
 siny-core = { path = "../siny-core" }
 tinystt = { path = "../tinystt", default-features = false }
 tinytts = { path = "../tinytts", default-features = false }

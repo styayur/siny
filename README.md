@@ -34,6 +34,11 @@ Shared terms are exact, case-sensitive, longest substring replacements applied o
 add `[[terms]]`, `from = "recognised spelling"`, `to = "preferred spelling"` to that file.
 Old config files are not overwritten or silently migrated.
 
+The system tray offers Open, Enable/Disable shortcuts, Stop/Cancel and Exit. Closing
+the window keeps Siny in the tray by default; disable this in Settings or choose
+**Exit Siny** to quit. If the tray cannot be created, closing exits normally. Hidden
+windows keep processing shortcuts and tasks without redrawing the editor while idle.
+
 Microphone-free file recognition is available from a terminal:
 
 ```powershell
