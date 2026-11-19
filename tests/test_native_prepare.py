@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('prepare_native', Path(__file__).resolve().parents[1] / 'scripts/prepare_native.py')
+spec = importlib.util.spec_from_file_location('prepare_bootstrap_native', Path(__file__).resolve().parents[1] / 'scripts/prepare_bootstrap_native.py')
 native = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(native)
 

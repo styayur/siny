@@ -35,7 +35,7 @@ Use stable MSVC Rust and Visual Studio C++ Build Tools on Windows 10/11 x64.
 
 ```powershell
 python scripts/prepare_native.py
-$env:SHERPA_ONNX_LIB_DIR = (Resolve-Path '.native/sherpa-onnx-v1.13.8-win-x64-static-MT-Release-lib/lib').Path
+$env:SHERPA_ONNX_LIB_DIR = (Resolve-Path '.native/siny-sherpa-1.13.8-ort-1.28.3-win-x64-static-MT/lib').Path
 cargo build --locked --release -p siny
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets --all-features -- -D warnings

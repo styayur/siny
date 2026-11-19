@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -25,11 +26,17 @@ jobs:
         with:
           python-version: '3.12'
       - name: Trust boundaries and native input
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python -m unittest discover -s tests
           python scripts/prepare_native.py --github-env
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Backend and GUI feature boundaries
+        run: |
+          cargo check --locked -p siny --no-default-features --lib
+          cargo check --locked -p siny --no-default-features --features sherpa --lib
       - name: Lint
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - name: Tests
@@ -48,6 +55,8 @@ jobs:
           python scripts/prepare_model.py --github-env
           python scripts/prepare_sensevoice.py --github-env
       - name: Actual inference, cancellation, recovery and reverse recognition
+        env:
+          SINY_EXPECT_ORT_VERSION: 1.28.3
         run: python scripts/check_acceptance.py
       - uses: actions/upload-artifact@v4
         if: always()
@@ -59,3 +68,10 @@ jobs:
             work/acceptance/*.log
             work/model-acceptance/native-report.toml
           if-no-files-found: warn
+      - name: Portable package, notices and corresponding application source
+        run: python scripts/package_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: dist/windows/*
+          if-no-files-found: error

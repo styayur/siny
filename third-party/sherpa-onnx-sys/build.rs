@@ -127,6 +127,9 @@ fn resolve_lib_dir(
         return Ok((path, None));
     }
 
+    if target_os == "windows" {
+        return Err("Siny Windows builds require the qualified SDK: run scripts/prepare_native.py and set SHERPA_ONNX_LIB_DIR; automatic upstream ORT 1.28.2 download is disabled".into());
+    }
     download_prebuilt_libs(link_mode, target_os, target_arch).map(|(p, s)| (p, Some(s)))
 }
 

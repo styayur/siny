@@ -1,0 +1,84 @@
+{
+  "sherpa_abi": "1.13.8",
+  "ort_version": "1.28.3",
+  "ort_source_commit": "0d68ff6b3b72b04aac578decd6c4c45d322bb962",
+  "application_commit": "44067f6bd101cea339775b4caf46e69a5b78efd8",
+  "source_bundle": "siny-corresponding-source.tar.gz",
+  "source_sha256": "e3198a6f2cfecbf77fcae6aa251dc333bb0aeaed2df026c4925409aba1b1079d",
+  "native_validation_run": "https://github.com/styayur/siny/actions/runs/44514178431",
+  "libraries": [
+    {
+      "name": "espeak-ng.lib",
+      "sha256": "f0255c507ef1e08de0efad735ecf3e1eae930df715c65361e525fcccc61f29a2",
+      "bytes": 823674
+    },
+    {
+      "name": "kaldi-decoder-core.lib",
+      "sha256": "94096301d2634ce699790b974d53a7e5277b6a40a1ee28154bc130b0aaa3c977",
+      "bytes": 4308664
+    },
+    {
+      "name": "kaldi-native-fbank-core.lib",
+      "sha256": "69c4a33cfcc665d8c8375c56f04b529df599767db3870503b2dae79140f47f9c",
+      "bytes": 1852382
+    },
+    {
+      "name": "kissfft-float.lib",
+      "sha256": "f28ab817626e5ed39fa6ce5f46f7aff685cd3c0d0ef23b72ffc715fb9c7a7862",
+      "bytes": 38212
+    },
+    {
+      "name": "onnxruntime.lib",
+      "sha256": "a2379569e51361959c99755b3c7a5b946e238e494800b062c0acf18acf5a60d5",
+      "bytes": 946294532
+    },
+    {
+      "name": "piper_phonemize.lib",
+      "sha256": "6a8435a73e35bfdded7ddabe9626c42d1086292978d4bfbb72888848ed2372f7",
+      "bytes": 800124
+    },
+    {
+      "name": "sherpa-onnx-c-api.lib",
+      "sha256": "a1b06a3aa2f11c126a4a20442f9524b864ee2466ef7a96902108a211eea6cc63",
+      "bytes": 1701426
+    },
+    {
+      "name": "sherpa-onnx-core.lib",
+      "sha256": "dc8672f43098d572ff4daef8a2e7ba103769eb57084a6964eb5b3702ec175e81",
+      "bytes": 66616864
+    },
+    {
+      "name": "sherpa-onnx-cxx-api.lib",
+      "sha256": "c861a142f46b90c42b447c675bfcc49fe508624d1f21d977ae8735a4e693c512",
+      "bytes": 629172
+    },
+    {
+      "name": "sherpa-onnx-fst.lib",
+      "sha256": "000393f5f81a412d7b0ae862c82e49c0154ef9718f5d16c9d0b49dd8b017f12a",
+      "bytes": 13558300
+    },
+    {
+      "name": "sherpa-onnx-fstfar.lib",
+      "sha256": "5696a8f0309b91a2927d202ed3e8ae5585070388431fea86d5d1593d2b97df63",
+      "bytes": 601326
+    },
+    {
+      "name": "sherpa-onnx-kaldifst-core.lib",
+      "sha256": "f6ac9a7f6931189721cc7df2cfd36c1678d790b99165245ccb70488f095724f6",
+      "bytes": 23055672
+    },
+    {
+      "name": "ssentencepiece_core.lib",
+      "sha256": "928af8dd5017435bad271e2c4aafceaab97cf29777ea6994403f5184c9dc8f05",
+      "bytes": 823206
+    },
+    {
+      "name": "ucd.lib",
+      "sha256": "a5bedc0b4b20e205098db4be97a149d8b9845366a6195e6d482bd35a228bc18e",
+      "bytes": 243106
+    }
+  ],
+  "archive": "siny-sherpa-1.13.8-ort-1.28.3-win-x64-static-MT.tar.bz2",
+  "archive_sha256": "5ed1c09b57321db554bdb6bab4c60e9482106fa7878bf53b7a4bc94d04b54d47",
+  "archive_bytes": 123301850
+}

@@ -23,8 +23,12 @@ Recording stops playback (half-duplex), avoiding speaker feedback and the comput
 cost of AEC; simultaneous conversation / AEC remains deferred until a measured echo fixture
 exists. Resampling is needed for actual device rates and 24 kHz TTS reverse recognition.
 SenseVoice receives the actual synthesis sample rate through sherpa's native resampler.
-The inherited microphone path uses linear interpolation; it is inexpensive but is not an
-anti-alias filter. Spectral aliasing and a proper low-pass replacement require evaluation.
+The shared microphone path uses sherpa's bandlimited low-pass resampler. A deterministic
+12 kHz tone at 48 kHz converted to 16 kHz gave RMS 0.0006614895, versus 0.3535534022 for
+the inherited linear interpolation: approximately 54.56 dB less alias energy. Processing
+took 0.0005967 seconds per second of fixture audio on Windows CI. This does not establish
+speech-accuracy gains or a real microphone performance benchmark. TinySTT's separate
+streaming linear resampler also has a boundary regression fix; it is not used for Siny capture.
 No claim that ASR and TTS model weights can be merged is made. Shared terminology is a text
 transform, and reverse recognition is an explicit diagnostic vulnerable to correlated errors.
 
