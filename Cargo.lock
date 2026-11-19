@@ -3887,6 +3887,7 @@ dependencies = [
 name = "tinytts"
 version = "0.1.0"
 dependencies = [
+ "clipboard-win",
  "eframe",
  "rfd",
  "rodio",

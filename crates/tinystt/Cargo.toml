@@ -15,7 +15,7 @@ path = "src/main.rs"
 [features]
 default = ["gui"]
 gui = ["native", "dep:eframe", "dep:tray-icon"]
-# The native feature enables the GUI, microphone capture, Windows integration,
+# The native feature enables microphone capture, Windows integration,
 # and sherpa-onnx. Disable it for dependency-light core unit tests.
 native = [
     "dep:cpal",

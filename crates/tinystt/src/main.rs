@@ -9,7 +9,6 @@
 )]
 
 #[cfg(feature = "gui")]
-#[cfg(feature = "gui")]
 use std::path::PathBuf;
 
 #[cfg(feature = "gui")]
