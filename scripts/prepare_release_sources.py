@@ -22,7 +22,10 @@ try:
         else:
             with tarfile.open(path) as archive:names=archive.getnames()
         legal=[name for name in names if any(token in Path(name).name.lower() for token in ['license','copying','notice'])]
-        if not legal:raise RuntimeError(item['name']+': no licence texts in archive')
+        if not legal:
+            paired=next((row for row in report['components'] if row['name']==item.get('license_source')),None)
+            if not paired or not paired['licence_files']:raise RuntimeError(item['name']+': no licence texts in archive or verified corresponding source')
+            legal=['corresponding-source:'+item['license_source']+':'+name for name in paired['licence_files']]
         report['components'].append(dict(name=item['name'],url=item['url'],sha256=digest,licence_files=legal))
     report['source_inventory_complete']=True
 finally:
