@@ -88,6 +88,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             3,
             1.0,
         ),
+        (
+            "english-slowest",
+            "This is an offline speech test. One, two, three.",
+            3,
+            0.5,
+        ),
+        (
+            "english-fastest",
+            "This is an offline speech test. One, two, three.",
+            3,
+            2.0,
+        ),
     ] {
         let audio = engine.synthesize(text, speaker, speed, &cancel)?;
         assert_eq!(audio.sample_rate, 24000);
@@ -116,6 +128,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     assert!(cases[1].frames < cases[0].frames * 9 / 10);
+    assert!(
+        cases
+            .iter()
+            .find(|case| case.name == "english-slowest")
+            .unwrap()
+            .frames
+            > cases[0].frames
+    );
+    assert!(
+        cases
+            .iter()
+            .find(|case| case.name == "english-fastest")
+            .unwrap()
+            .frames
+            < cases[1].frames
+    );
     let in_flight = Arc::new(AtomicBool::new(false));
     let worker_cancel = Arc::clone(&in_flight);
     let worker_engine = Arc::clone(&engine);

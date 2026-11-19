@@ -30,6 +30,10 @@ pub struct SinyApp {
     reverse: String,
     read_after: bool,
     last_audio: Option<Audio>,
+    last_recording: Option<Audio>,
+    voices: Vec<siny_core::Voice>,
+    voices_from_model: bool,
+    reading_stream: bool,
     show_settings: bool,
     dictation_delivery: bool,
     paste_target: Option<PasteTarget>,
@@ -88,6 +92,10 @@ impl SinyApp {
             reverse: String::new(),
             read_after: false,
             last_audio: None,
+            last_recording: None,
+            voices: reviewed_voices(),
+            voices_from_model: false,
+            reading_stream: false,
             show_settings: false,
             dictation_delivery: false,
             paste_target: None,
@@ -103,9 +111,16 @@ impl SinyApp {
             return;
         }
         self.devices.stop_playback();
+        self.reading_stream = false;
+        let streaming = matches!(
+            &operation,
+            Operation::ReadStream(_) | Operation::DictateThenReadStream(_)
+        );
         self.dictation_delivery = matches!(
             &operation,
-            Operation::Dictate(_) | Operation::DictateThenRead(_)
+            Operation::Dictate(_)
+                | Operation::DictateThenRead(_)
+                | Operation::DictateThenReadStream(_)
         );
         match self
             .scheduler
@@ -113,7 +128,19 @@ impl SinyApp {
             .ok_or("Save valid settings first".into())
             .and_then(|s| s.submit(operation))
         {
-            Ok(job) => {
+            Ok(mut job) => {
+                if streaming {
+                    if let Some(audio) = job.audio.take() {
+                        if let Err(error) = self.devices.play_stream(audio) {
+                            job.cancel();
+                            self.dictation_delivery = false;
+                            self.paste_target = None;
+                            self.status = error;
+                            return;
+                        }
+                        self.reading_stream = true;
+                    }
+                }
                 self.job = Some(job);
                 self.status = "Working locally…".into();
             }
@@ -129,6 +156,7 @@ impl SinyApp {
             return;
         }
         self.last_audio = None;
+        self.last_recording = None;
         self.paste_target = PasteTarget::capture();
         match self.devices.record(&self.applied_settings.microphone) {
             Ok(()) => self.status = "Recording · release shortcut or Finish".into(),
@@ -141,8 +169,11 @@ impl SinyApp {
                 self.status = "Recording shorter than 250 ms was discarded".into();
                 return;
             }
+            if self.applied_settings.retain_recording {
+                self.last_recording = Some(audio.clone());
+            }
             self.submit(if self.read_after {
-                Operation::DictateThenRead(audio)
+                Operation::DictateThenReadStream(audio)
             } else {
                 Operation::Dictate(audio)
             });
@@ -150,6 +181,8 @@ impl SinyApp {
     }
     fn stop(&mut self) {
         self.devices.cancel();
+        self.reading_stream = false;
+        self.last_recording = None;
         self.dictation_delivery = false;
         self.paste_target = None;
         if let Some(job) = &self.job {
@@ -166,7 +199,7 @@ impl SinyApp {
         match services::read_clipboard() {
             Ok(Some(text)) => {
                 self.text = text.clone();
-                self.submit(Operation::Read(text));
+                self.submit(Operation::ReadStream(text));
             }
             Ok(None) => self.status = "Clipboard contains no text".into(),
             Err(e) => self.status = e,
@@ -186,11 +219,28 @@ impl SinyApp {
                     }
                     match result {
                         Ok(outcome) => {
-                            if !outcome.text.is_empty() {
+                            if self.dictation_delivery && !outcome.text.is_empty() {
                                 self.text = outcome.text;
                             }
                             self.status =
                                 format!("Completed locally in {:.2} s", outcome.elapsed_seconds);
+                            if self.reading_stream {
+                                self.status = format!(
+                                    "Speech generation completed in {:.2} s · playback continues",
+                                    outcome.elapsed_seconds
+                                );
+                            }
+                            if let Some(voices) = outcome.voices {
+                                self.voices = voices;
+                                self.voices_from_model = true;
+                                self.status = format!(
+                                    "Loaded {} voice names from saved model",
+                                    self.voices.len()
+                                );
+                            }
+                            if let Some(path) = outcome.saved {
+                                self.status = format!("WAV saved: {}", path.display());
+                            }
                             if self.dictation_delivery && !self.text.is_empty() {
                                 match services::deliver_dictation(
                                     &self.text,
@@ -223,7 +273,11 @@ impl SinyApp {
                                 }
                             }
                         }
-                        Err(e) => self.status = e,
+                        Err(e) => {
+                            self.devices.stop_playback();
+                            self.reading_stream = false;
+                            self.status = e;
+                        }
                     }
                     self.dictation_delivery = false;
                     self.paste_target = None;
@@ -255,6 +309,10 @@ impl SinyApp {
         }
         if self.devices.player.as_ref().is_some_and(|p| p.is_empty()) {
             self.devices.player = None;
+            if self.reading_stream && self.job.is_none() {
+                self.reading_stream = false;
+                self.status = "Playback completed".into();
+            }
         }
     }
 
@@ -283,6 +341,11 @@ impl SinyApp {
                 self.scheduler = Some(scheduler);
                 self.shortcuts = shortcuts;
                 self.applied_settings = self.settings.clone();
+                self.voices = reviewed_voices();
+                self.voices_from_model = false;
+                if !self.applied_settings.retain_recording {
+                    self.last_recording = None;
+                }
                 self.status = "Settings saved and applied · models load on demand".into();
             }
             Err(error) => {
@@ -352,6 +415,16 @@ fn make_scheduler(base: &std::path::Path, settings: &Settings) -> siny_core::Res
         settings.clone(),
     )
 }
+fn reviewed_voices() -> Vec<siny_core::Voice> {
+    tinytts::tts::KOKORO_VOICES
+        .iter()
+        .enumerate()
+        .map(|(id, name)| siny_core::Voice {
+            id: id as i32,
+            name: (*name).into(),
+        })
+        .collect()
+}
 impl eframe::App for SinyApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // eframe 0.37 calls logic while hidden; ui is not called for an invisible tray window.
@@ -396,7 +469,7 @@ impl eframe::App for SinyApp {
                 if self.devices.recording.is_some() {
                     if ui.button("Finish recording").clicked() { self.finish(); }
                 } else if ui.add_enabled(idle, egui::Button::new(format!("Record · {}", self.applied_settings.hotkey))).clicked() { self.record(); }
-                if ui.add_enabled(idle && !self.text.trim().is_empty(), egui::Button::new("Read aloud")).clicked() { self.submit(Operation::Read(self.text.clone())); }
+                if ui.add_enabled(idle && !self.text.trim().is_empty(), egui::Button::new("Read aloud")).clicked() { self.submit(Operation::ReadStream(self.text.clone())); }
                 if ui.button("Stop / Cancel").clicked() { self.stop(); }
                 ui.checkbox(&mut self.read_after, "Read after dictation");
             });
@@ -408,13 +481,18 @@ impl eframe::App for SinyApp {
                     if ui.button(if player.is_paused() { "Resume" } else { "Pause" }).clicked() { if player.is_paused() { player.resume(); } else { player.pause(); } }
                 }
             });
-            ui.add(egui::TextEdit::multiline(&mut self.text).desired_width(f32::INFINITY).desired_rows(10).hint_text("Type or dictate. Nothing is uploaded."));
+            ui.add(egui::TextEdit::multiline(&mut self.text).char_limit(1_000_000).desired_width(f32::INFINITY).desired_rows(10).hint_text("Type or dictate. Nothing is uploaded."));
             if !self.reverse.is_empty() { ui.label(&self.reverse); }
             ui.horizontal_wrapped(|ui| {
-                if ui.add_enabled(self.last_audio.is_some(), egui::Button::new("Save WAV…")).clicked() {
-                    // Native dialog and export are explicit; no automatic recording export.
+                if ui.add_enabled(idle && !self.text.trim().is_empty(), egui::Button::new("Export speech WAV…")).clicked() {
+                    // Incremental export uses the existing serial backend; no whole-document PCM buffer.
                     if let Some(path) = rfd::FileDialog::new().add_filter("Wave audio", &["wav"]).set_file_name("siny.wav").save_file() {
-                        if let Some(audio) = &self.last_audio { self.status = match tinytts::audio::wav::write_wav(&path, &audio.samples, audio.sample_rate) { Ok(()) => "WAV saved".into(), Err(e) => e.to_string() }; }
+                        self.submit(Operation::ExportWav { text: self.text.clone(), path });
+                    }
+                }
+                if ui.add_enabled(idle && self.last_recording.is_some(), egui::Button::new("Save debug recording…")).clicked() {
+                    if let Some(path) = rfd::FileDialog::new().add_filter("Wave audio", &["wav"]).set_file_name("siny-recording.wav").save_file() {
+                        if let Some(audio) = &self.last_recording { self.status = match tinytts::audio::wav::write_wav(&path, &audio.samples, audio.sample_rate) { Ok(()) => "Debug recording saved explicitly".into(), Err(error) => error.to_string() }; }
                     }
                 }
                 if ui.add_enabled(idle, egui::Button::new("Unload models")).clicked() { self.last_audio = None; self.submit(Operation::Unload); }
@@ -432,6 +510,7 @@ impl eframe::App for SinyApp {
                 ui.horizontal(|ui| { ui.label("Dictation shortcut"); ui.text_edit_singleline(&mut self.settings.hotkey); });
                 ui.checkbox(&mut self.settings.auto_paste, "Paste dictation into its original foreground application (off by default)");
                 ui.checkbox(&mut self.settings.close_to_tray, "Close keeps Siny in the system tray (use Exit Siny to quit)");
+                ui.checkbox(&mut self.settings.retain_recording, "Keep the last finished recording in memory for explicit debug WAV export (off by default)");
                 if ui.button(if self.shortcuts_enabled { "Disable global shortcuts" } else { "Enable global shortcuts" }).clicked() { self.toggle_shortcuts(&ctx); }
                 ui.label("Dictation is copied automatically. Paste is skipped if focus changes or the destination is Siny.");
                 ui.horizontal_wrapped(|ui| {
@@ -442,9 +521,17 @@ impl eframe::App for SinyApp {
                     ui.label("Unload after idle seconds"); ui.add(egui::DragValue::new(&mut self.settings.idle_unload_seconds).range(1..=3600));
                 });
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Voice ID"); ui.add(egui::DragValue::new(&mut self.settings.voice).range(0..=53));
+                    ui.label("Voice");
+                    let selected = self.voices.iter().find(|voice| voice.id == self.settings.voice).map(|voice| voice.name.clone()).unwrap_or_else(|| format!("Unknown voice {}", self.settings.voice));
+                    egui::ComboBox::from_id_salt("voice").selected_text(selected).show_ui(ui, |ui| {
+                        for voice in &self.voices { ui.selectable_value(&mut self.settings.voice, voice.id, format!("{} · {}", voice.name, voice.id)); }
+                    });
                     ui.label("Speed"); ui.add(egui::Slider::new(&mut self.settings.speed, 0.5..=2.0));
                     ui.label("Threads"); egui::ComboBox::from_id_salt("threads").selected_text(self.settings.threads.to_string()).show_ui(ui, |ui| { for n in [1,2,4] { ui.selectable_value(&mut self.settings.threads,n,n.to_string()); } });
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(if self.voices_from_model { "Voice list from saved model" } else { "Reviewed Kokoro voice names; load saved model metadata to refresh" });
+                    if ui.add_enabled(idle, egui::Button::new("Load saved model voices")).clicked() { self.submit(Operation::Voices); }
                 });
                 ui.collapsing("Shared terminology · exact case-sensitive replacement", |ui| {
                     let mut remove = None;

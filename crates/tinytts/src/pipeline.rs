@@ -56,7 +56,7 @@ impl Pipeline {
 
         let (tx, rx) = queue::bounded(queue::QUEUE_CAPACITY);
         let player = Player::new()?;
-        player.start_feeding(rx);
+        player.start_feeding(rx)?;
 
         let _ = spawn_producer(
             ProducerRequest {
@@ -163,7 +163,6 @@ fn spawn_producer(request: ProducerRequest, output: ProducerOutput) -> JoinHandl
         .name("tinytts-tts".to_string())
         .spawn(move || {
             run_producer(request, &output);
-            output.producer_done.store(true, Ordering::Relaxed);
         })
         .expect("failed to spawn TTS thread")
 }
@@ -201,6 +200,7 @@ fn run_producer(request: ProducerRequest, output: &ProducerOutput) {
             }
         }
     }
+    output.producer_done.store(true, Ordering::Release);
 }
 
 /// Synthesize an entire text into a single in-memory sample buffer. Used by

@@ -74,6 +74,40 @@ pub struct Voice {
     pub name: String,
 }
 
+/// Read optional model voice names without loading weights. Keep original speaker order and bound metadata allocation.
+pub fn voice_catalog(path: &std::path::Path, count: usize) -> Vec<Voice> {
+    use std::io::Read;
+    let count = count.min(1024);
+    if let Ok(file) = std::fs::File::open(path) {
+        let mut text = String::new();
+        if file.take(1_048_577).read_to_string(&mut text).is_ok() && text.len() <= 1_048_576 {
+            let names: Vec<Voice> = text
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .take(count)
+                .enumerate()
+                .map(|(id, name)| Voice {
+                    id: id as i32,
+                    name: name.into(),
+                })
+                .collect();
+            if !names.is_empty() {
+                return names;
+            }
+        }
+    }
+    KOKORO_VOICES
+        .iter()
+        .take(count)
+        .enumerate()
+        .map(|(id, name)| Voice {
+            id: id as i32,
+            name: (*name).into(),
+        })
+        .collect()
+}
+
 /// One chunk of synthesized audio.
 #[derive(Debug, Clone)]
 pub struct AudioChunk {
@@ -102,4 +136,24 @@ pub trait TtsEngine: Send + Sync {
         speed: f32,
         cancel: &Arc<AtomicBool>,
     ) -> Result<AudioChunk>;
+}
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::*;
+    #[test]
+    fn model_names_keep_speaker_order_and_oversized_metadata_is_bounded() {
+        let path =
+            std::env::temp_dir().join(format!("tinytts-voice-catalog-{}.txt", std::process::id()));
+        std::fs::write(&path, "custom_zero\n\ncustom_one\n").unwrap();
+        let voices = voice_catalog(&path, 54);
+        assert_eq!(voices[0].name, "custom_zero");
+        assert_eq!(voices[1].name, "custom_one");
+        assert_eq!(voices[1].id, 1);
+        std::fs::write(&path, vec![b'x'; 1_048_577]).unwrap();
+        let fallback = voice_catalog(&path, 54);
+        assert_eq!(fallback.len(), 54);
+        assert_eq!(fallback[3].name, "af_heart");
+        std::fs::remove_file(path).unwrap();
+    }
 }

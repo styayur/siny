@@ -274,27 +274,26 @@ mod platform {
                 let message = wparam as u32;
                 if let Some(runtime) = HOOK_RUNTIME.get() {
                     if let Ok(mut runtime) = runtime.lock() {
-                        let Some(runtime) = runtime.as_mut() else {
-                            return CallNextHookEx(ptr::null_mut(), code, wparam, lparam);
-                        };
-                        let spec = runtime.spec.clone();
-                        let key = event.vkCode as u16;
-                        let key_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-                        let key_up = message == WM_KEYUP || message == WM_SYSKEYUP;
+                        if let Some(runtime) = runtime.as_mut() {
+                            let spec = runtime.spec.clone();
+                            let key = event.vkCode as u16;
+                            let key_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+                            let key_up = message == WM_KEYUP || message == WM_SYSKEYUP;
 
-                        if key == spec.virtual_key
-                            && key_down
-                            && modifiers_match(&spec)
-                            && !runtime.action_down
-                        {
-                            runtime.action_down = true;
-                            let _ = runtime.tx.send(HotkeyEvent::Pressed);
-                        } else if runtime.action_down
-                            && key_up
-                            && (key == spec.virtual_key || !modifiers_match(&spec))
-                        {
-                            runtime.action_down = false;
-                            let _ = runtime.tx.send(HotkeyEvent::Released);
+                            if key == spec.virtual_key
+                                && key_down
+                                && modifiers_match(&spec)
+                                && !runtime.action_down
+                            {
+                                runtime.action_down = true;
+                                let _ = runtime.tx.send(HotkeyEvent::Pressed);
+                            } else if runtime.action_down
+                                && key_up
+                                && (key == spec.virtual_key || !modifiers_match(&spec))
+                            {
+                                runtime.action_down = false;
+                                let _ = runtime.tx.send(HotkeyEvent::Released);
+                            }
                         }
                     }
                 }

@@ -9,11 +9,13 @@ recovery, microphone capture, playback pause/resume/stop, clipboard/hotkeys, res
 licence inventory. Run the CI probes against the exact release SHA. Keep model/audio inputs
 local; publish numerical reports and hashes only.
 
-Compatibility gaps against legacy apps: tray controls, optional auto-paste, debug recording
-export, full voice-name selector, unlimited long-text queue, live settings for language and
-terminology, old-config import. These are not asserted as complete. Original repositories
-stay open; migrate no issues and perform no archival until these decisions and acceptance
-are resolved. Neither repository currently has an open user issue to transfer.
+The next-alpha source implements tray controls/background logic, dictation copy and guarded
+opt-in paste, explicit legacy-config preview/import, WAV CLI, live language/terms/idle settings,
+named model voices, optional capture retention/debug export, incremental long-text reading and
+atomic streamed WAV export. [Migration contract](parity-matrix.md) defines the actual old-app
+capabilities and acceptance owner. Code implementation is not final Windows product acceptance.
+Original repositories stay open until exact-main/release and real Windows checks qualify the
+new build. Neither repository currently has an open user issue to transfer.
 
 ## DSP evaluation
 

@@ -17,7 +17,9 @@ audio back through SenseVoice and displays character similarity. This is a diagn
 not a guarantee of pronunciation or recognition accuracy. Dictation copies its result;
 automatic paste is off by default and only targets the still-focused application
 where recording started. Reading and verification do not replace the clipboard.
-Pause, Resume, Stop and WAV export are available after synthesis.
+Pause, Resume and Stop control streamed playback. **Export speech WAV** renders the
+editor incrementally to an explicitly selected file, without retaining the whole
+document's PCM in memory. Cancellation/error keeps an existing destination intact.
 
 No account, server, telemetry, updater or runtime downloads. Models are **not** included.
 Install the reviewed models separately under `models/sensevoice` and `models/kokoro`
@@ -50,11 +52,20 @@ returns 1 on execution errors or 2 on invalid arguments. `--config <siny.toml>` 
 an explicit Siny config; command options override it. WAV files are bounded at 256 MiB
 and one hour. `--help` lists options.
 
-The worker accepts two waiting tasks; the GUI accepts one active task. Inputs are capped
-at 60 seconds / 10,000 characters; synthesized output at two minutes. Models unload
+The worker accepts two waiting tasks; the GUI accepts one active task. Microphone
+input is capped at 60 seconds; long-form reading/export accepts up to 1,000,000
+characters and has no two-minute total-output cap. The production audio channel
+holds two chunks; the player separately limits its internal sink to two chunks.
+Reverse-verification diagnostics retain 10,000 characters / two minutes of audio.
+Models unload
 following 60 seconds of worker inactivity (configurable) or Unload models. Recording stops
 playback: half-duplex prevents self-triggering without claiming acoustic echo cancellation.
 Native ASR cannot be interrupted inside a decode; cancelled output is discarded afterward.
+Named voices preserve the reviewed Kokoro IDs; **Load saved model voices** queries
+the actual model through the same worker. Retain recording is off by default. If
+enabled in Settings, a finished capture stays in memory only until the next capture,
+cancel/stop, disabling retention or exit. **Save debug recording** is an explicit
+file action; cancelled captures and recordings are never automatically written.
 
 ## Build and verify
 
