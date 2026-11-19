@@ -64,7 +64,8 @@ archives for other native components with their manifest. No SenseVoice/Kokoro m
 user input, captured audio or generated speech is included. Original licences are retained.
 
 Place the supplied ORT source at .native-build/onnxruntime, then use
-scripts/native-security-build.ps1. Rehydrate sherpa inputs using scripts/prepare_native.py and
+scripts/native-security-build.ps1. Rehydrate build-bootstrap sherpa inputs using
+scripts/prepare_bootstrap_native.py (includes ORT 1.28.2; never publish that library), then
 replace only onnxruntime.lib with the source-built library. The native C API smoke and real
 model tests are required. Build dependency downloads remain hash pinned in the source scripts.
 

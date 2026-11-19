@@ -18,7 +18,7 @@ cmake --build .native-build/smoke --config Release
 if ($LASTEXITCODE) { throw 'Native smoke build failed' }
 ctest --test-dir .native-build/smoke --build-config Release --verbose --no-tests=error
 if ($LASTEXITCODE) { throw 'Native smoke test failed' }
-python scripts/prepare_native.py
+python scripts/prepare_bootstrap_native.py
 if ($LASTEXITCODE) { throw 'Pinned sherpa preparation failed' }
 $originalPath = (Resolve-Path '.native/sherpa-onnx-v1.13.8-win-x64-static-MT-Release-lib/lib').Path
 $securePath = [IO.Path]::GetFullPath('.native-build/secure-lib')
