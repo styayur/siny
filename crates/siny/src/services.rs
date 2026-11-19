@@ -117,9 +117,17 @@ impl Shortcuts {
                 }
             })
             .map_err(|e| e.to_string())?;
-        ready_rx
-            .recv_timeout(Duration::from_secs(3))
-            .map_err(|e| e.to_string())??;
+        match ready_rx.recv_timeout(Duration::from_secs(3)) {
+            Ok(Ok(())) => (),
+            Ok(Err(error)) => {
+                stop.store(true, Ordering::Release);
+                return Err(error);
+            }
+            Err(error) => {
+                stop.store(true, Ordering::Release);
+                return Err(error.to_string());
+            }
+        }
         Ok(Self { receiver, stop })
     }
     pub fn poll(&self) -> Option<ShortcutEvent> {

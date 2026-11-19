@@ -1,5 +1,5 @@
 """Package validated native inputs alongside corresponding source and notices."""
-import hashlib, json, os, shutil, subprocess, tarfile, zipfile
+import hashlib, json, os, re, shutil, subprocess, tarfile, zipfile
 from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[1]
 ORT_COMMIT = '0d68ff6b3b72b04aac578decd6c4c45d322bb962'
@@ -46,6 +46,7 @@ def main():
         archive.extractall(source_tree, filter='data')
     config = subprocess.check_output(['cargo', 'vendor', '--locked', '--versioned-dirs', str(source_tree / 'vendor')], cwd=ROOT, text=True)
     config = config.replace(str(source_tree / 'vendor').replace('\\', '/'), 'vendor').replace(str(source_tree / 'vendor'), 'vendor')
+    config = re.sub(r'^directory\s*=.*$', 'directory = "vendor"', config, flags=re.MULTILINE)
     (source_tree / '.cargo').mkdir(exist_ok=True)
     with (source_tree / '.cargo/config.toml').open('a', encoding='utf-8') as stream:
         stream.write('\n' + config)
