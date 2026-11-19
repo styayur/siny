@@ -9,6 +9,8 @@ def digest(path):
         return hashlib.file_digest(source, 'sha256').hexdigest()
 def run(args, **kwargs):
     return subprocess.run(args, cwd=ROOT, check=True, **kwargs)
+def portable_vendor_config(config):
+    return re.sub(r'^directory\s*=.*$', 'directory = "vendor"', config, flags=re.MULTILINE)
 def source_filter(info):
     return None if any(p in ['.git', '__pycache__'] for p in Path(info.name).parts) else info
 def legal_path(root, name):
@@ -46,7 +48,7 @@ def main():
         archive.extractall(source_tree, filter='data')
     config = subprocess.check_output(['cargo', 'vendor', '--locked', '--versioned-dirs', str(source_tree / 'vendor')], cwd=ROOT, text=True)
     config = config.replace(str(source_tree / 'vendor').replace('\\', '/'), 'vendor').replace(str(source_tree / 'vendor'), 'vendor')
-    config = re.sub(r'^directory\s*=.*$', 'directory = "vendor"', config, flags=re.MULTILINE)
+    config = portable_vendor_config(config)
     (source_tree / '.cargo').mkdir(exist_ok=True)
     with (source_tree / '.cargo/config.toml').open('a', encoding='utf-8') as stream:
         stream.write('\n' + config)
@@ -85,7 +87,7 @@ components retain their individual grants. There is no warranty.
         archive.add(ROOT / 'work/licenses', arcname='siny-source/licenses')
     sdk = stage / NAME
     sdk.mkdir(exist_ok=True)
-    shutil.copytree(ROOT / '.native-build/secure-lib', sdk / 'lib', dirs_exist_ok=True)
+    shutil.copytree(ROOT / '.native-build/secure-lib', sdk / 'lib', dirs_exist_ok=True, copy_function=os.link)
     shutil.copytree(ROOT / 'work/licenses', sdk / 'licenses', dirs_exist_ok=True)
     for name in ['LICENSE', 'LICENSE-GPL-3.0', 'THIRD_PARTY_NOTICES.md']:
         shutil.copyfile(ROOT / name, sdk / name)
