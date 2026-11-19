@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
-$ortPath = (Resolve-Path '.native-build/helper/onnxruntime').Path
+$ortPath = (Resolve-Path '.native-build/helper/onnxruntime').Path.Replace('\', '/')
 $ortCommit = (git -C $ortPath rev-parse HEAD).Trim()
 if ($ortCommit -ne '0d68ff6b3b72b04aac578decd6c4c45d322bb962') { throw 'ORT source identity mismatch' }
 if ((Get-Content (Join-Path $ortPath 'VERSION_NUMBER') -Raw).Trim() -ne '1.28.3') { throw 'ORT version mismatch' }
 git -C $ortPath submodule update --init --depth=1 --recursive
 if ($LASTEXITCODE) { throw 'ORT submodule checkout failed' }
-$outputPath = [IO.Path]::GetFullPath('.native-build/output')
+$outputPath = [IO.Path]::GetFullPath('.native-build/output').Replace('\', '/')
 cmake -S .native-build/helper/static_lib -B .native-build/build -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_CONFIGURATION_TYPES=Release -DUSE_STATIC_CRT=ON -Donnxruntime_BUILD_UNIT_TESTS=OFF "-DONNXRUNTIME_SOURCE_DIR=$ortPath" "-DCMAKE_INSTALL_PREFIX=$outputPath"
 if ($LASTEXITCODE) { throw 'Native CMake configure failed' }
 cmake --build .native-build/build --config Release --parallel 2
