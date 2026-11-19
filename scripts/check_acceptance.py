@@ -14,6 +14,15 @@ for binary in ['native_model_acceptance','acceptance']:
     reports[binary]={'returncode':result.returncode,'wall_seconds':time.perf_counter()-started}
 reports['siny']=tomllib.loads((output/'siny-report.toml').read_text(encoding='utf-8'))
 reports['tinytts']=tomllib.loads((ROOT/'work/model-acceptance/native-report.toml').read_text(encoding='utf-8'))
+app=ROOT/'target/release'/('siny.exe' if os.name=='nt' else 'siny')
+cli=subprocess.run([str(app),'--file',str(Path(os.environ['SINY_TEST_ASR'])/'test_wavs/en.wav'),
+    '--model-dir',os.environ['SINY_TEST_ASR'],'--num-threads','2','--language','en'],
+    cwd=ROOT,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
+if cli.returncode or 'tribal chieftain' not in cli.stdout.lower():
+    raise RuntimeError('Actual production WAV CLI failed: '+cli.stderr[-600:])
+invalid=subprocess.run([str(app),'--file','missing.wav','--num-threads','3'],cwd=ROOT,capture_output=True,timeout=15)
+if invalid.returncode!=2:raise AssertionError('CLI invalid arguments must exit 2')
+reports['cli']={'returncode':cli.returncode,'official_sample_phrase_present':True,'invalid_arguments_exit':invalid.returncode}
 reports['limits']=['Round-trip recognition is diagnostic, not human listening or WER benchmark','Official upstream en.wav uses a partial reference check','Physical microphone/output and desktop acceptance are separate','No model or audio redistribution']
 (output/'report.json').write_text(json.dumps(reports,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 print(json.dumps(reports['siny'],ensure_ascii=False))

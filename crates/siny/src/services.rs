@@ -66,9 +66,10 @@ pub enum ShortcutEvent {
 pub struct Shortcuts {
     receiver: std::sync::mpsc::Receiver<ShortcutEvent>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
 }
 impl Shortcuts {
-    pub fn register(ctx: eframe::egui::Context) -> Result<Self> {
+    pub fn register(ctx: eframe::egui::Context, hotkey: &str) -> Result<Self> {
         use std::sync::{
             atomic::{AtomicBool, Ordering},
             mpsc, Arc,
@@ -78,14 +79,12 @@ impl Shortcuts {
         let (ready, ready_rx) = mpsc::sync_channel(1);
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
-        std::thread::Builder::new()
+        let hotkey = HotkeySpec::parse(hotkey).map_err(|e| e.to_string())?;
+        let worker = std::thread::Builder::new()
             .name("siny-shortcuts".into())
             .spawn(move || {
                 let registered = (|| -> Result<_> {
-                    let dictation = GlobalHotkey::register(
-                        HotkeySpec::parse("Ctrl+Alt+D").map_err(|e| e.to_string())?,
-                    )
-                    .map_err(|e| e.to_string())?;
+                    let dictation = GlobalHotkey::register(hotkey).map_err(|e| e.to_string())?;
                     let reading = tinytts::hotkey::GlobalHotkey::register()
                         .ok_or("Cannot register Ctrl+Alt+S")?;
                     Ok((dictation, reading))
@@ -128,7 +127,11 @@ impl Shortcuts {
                 return Err(error.to_string());
             }
         }
-        Ok(Self { receiver, stop })
+        Ok(Self {
+            receiver,
+            stop,
+            worker: Some(worker),
+        })
     }
     pub fn poll(&self) -> Option<ShortcutEvent> {
         self.receiver.try_recv().ok()
@@ -137,6 +140,9 @@ impl Shortcuts {
 impl Drop for Shortcuts {
     fn drop(&mut self) {
         self.stop.store(true, std::sync::atomic::Ordering::Release);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
     }
 }
 pub fn read_clipboard() -> Result<Option<String>> {
@@ -144,4 +150,75 @@ pub fn read_clipboard() -> Result<Option<String>> {
 }
 pub fn write_clipboard(text: &str) -> Result<()> {
     tinystt::clipboard::write_text(text).map_err(|e| e.to_string())
+}
+
+/// A foreground destination observed when dictation starts. Never activates another application.
+#[derive(Clone, Copy)]
+pub struct PasteTarget {
+    window: isize,
+    process: u32,
+}
+impl PasteTarget {
+    pub fn capture() -> Option<Self> {
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetForegroundWindow, GetWindowThreadProcessId,
+            };
+            let mut process = 0;
+            // These HWND values are opaque OS handles. The PID output points to a live local u32.
+            let window = unsafe { GetForegroundWindow() };
+            if window.is_null() {
+                return None;
+            }
+            unsafe {
+                GetWindowThreadProcessId(window, &mut process);
+            }
+            if process != 0 && process != std::process::id() {
+                return Some(Self {
+                    window: window as isize,
+                    process,
+                });
+            }
+        }
+        None
+    }
+    fn still_foreground(self) -> bool {
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
+            };
+            let window = self.window as *mut std::ffi::c_void;
+            let mut process = 0;
+            // Validate the captured opaque HWND before comparing it with the current foreground window.
+            unsafe {
+                GetWindowThreadProcessId(window, &mut process);
+                IsWindow(window) != 0 && process == self.process && GetForegroundWindow() == window
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (self.window, self.process);
+            false
+        }
+    }
+}
+
+pub fn deliver_dictation(
+    text: &str,
+    auto_paste: bool,
+    target: Option<PasteTarget>,
+) -> Result<&'static str> {
+    write_clipboard(text)?;
+    if auto_paste {
+        if target.is_some_and(PasteTarget::still_foreground) {
+            tinystt::paste::send_ctrl_v().map_err(|e| e.to_string())?;
+            Ok("Copied and pasted to the dictation destination")
+        } else {
+            Ok("Copied; paste skipped because the destination changed or is Siny")
+        }
+    } else {
+        Ok("Dictation copied to clipboard")
+    }
 }

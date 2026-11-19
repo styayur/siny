@@ -39,7 +39,8 @@ impl SherpaBackend {
 impl Backend for SherpaBackend {
     fn recognize(&mut self, audio: &Audio, cancel: &Cancel) -> Result<String> {
         check_cancel(cancel)?;
-        audio.validate(120)?;
+        // File CLI can recognize a bounded one-hour file; scheduler still bounds microphone/reverse jobs.
+        audio.validate(3600)?;
         if self.asr.is_none() {
             let paths = tinystt::paths::Paths::new(&self.base);
             let settings = tinystt::settings::Settings {

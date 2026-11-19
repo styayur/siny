@@ -3,5 +3,7 @@
 pub mod app;
 #[cfg(feature = "sherpa")]
 pub mod backend;
+pub mod cli;
+pub mod migration;
 #[cfg(feature = "gui")]
 pub mod services;

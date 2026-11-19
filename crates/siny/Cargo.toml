@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/styayur/siny"
 [features]
 default = ["gui"]
-sherpa = ["tinystt/native", "tinytts/native", "dep:sherpa-onnx"]
+sherpa = ["tinystt/native", "tinytts/native", "dep:sherpa-onnx", "dep:windows-sys"]
 gui = ["sherpa", "dep:eframe", "dep:rfd"]
 [dependencies]
 sherpa-onnx = { workspace = true, optional = true }
@@ -17,6 +17,8 @@ tinytts = { path = "../tinytts", default-features = false }
 eframe = { workspace = true, optional = true }
 serde.workspace = true
 toml.workspace = true
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_WindowsAndMessaging"] }
 [[bin]]
 name = "siny"
 path = "src/main.rs"

@@ -5,13 +5,18 @@ Kokoro reads. Both models remain separate and load only when requested.
 
 **Integration preview under validation.** This branch is not an accepted replacement
 for TinySTT/TinyTTS. Neither old repository is archived. See [acceptance](docs/acceptance.md).
+The published [alpha.1](https://github.com/styayur/siny/releases/tag/v0.1.0-alpha.1)
+retains its qualified original bytes. Migration work for the next alpha follows the
+[product parity matrix](docs/parity-matrix.md).
 
 ## Use
 
 Record or hold Ctrl+Alt+D to dictate. Read aloud speaks the editor; Ctrl+Alt+S reads
 the clipboard. Read after dictation connects the two. Verify speech → text runs synthesized
 audio back through SenseVoice and displays character similarity. This is a diagnostic,
-not a guarantee of pronunciation or recognition accuracy. Copy text is explicit; no auto-paste.
+not a guarantee of pronunciation or recognition accuracy. Dictation copies its result;
+automatic paste is off by default and only targets the still-focused application
+where recording started. Reading and verification do not replace the clipboard.
 Pause, Resume, Stop and WAV export are available after synthesis.
 
 No account, server, telemetry, updater or runtime downloads. Models are **not** included.
@@ -19,9 +24,26 @@ Install the reviewed models separately under `models/sensevoice` and `models/kok
 next to `siny.exe`; see the imported [SenseVoice](crates/tinystt/docs/model-provenance.md)
 and [Kokoro](crates/tinytts/docs/model-provenance.md) provenance. Absolute model paths
 can be saved in Settings. Configuration is `config/siny.toml` beside the executable.
+Language, dictation shortcut, idle timeout, auto-paste and shared terms are editable
+in Settings. Changes apply after **Save & apply**, without restarting; failed saves
+keep the previous active settings. **Import TinySTT/TinyTTS config** reads an explicitly
+selected legacy TOML file into the settings preview. It preserves that file, resolves
+relative model paths against the old application directory and maps reviewed Kokoro
+voice names to stable IDs. Review the preview, including shared threads, before saving.
 Shared terms are exact, case-sensitive, longest substring replacements applied once;
 add `[[terms]]`, `from = "recognised spelling"`, `to = "preferred spelling"` to that file.
 Old config files are not overwritten or silently migrated.
+
+Microphone-free file recognition is available from a terminal:
+
+```powershell
+.\siny.exe --file .\sample.wav --model-dir .\models\sensevoice --language en --num-threads 2
+```
+
+File mode writes recognition to stdout, opens no GUI/audio devices/clipboard and
+returns 1 on execution errors or 2 on invalid arguments. `--config <siny.toml>` chooses
+an explicit Siny config; command options override it. WAV files are bounded at 256 MiB
+and one hour. `--help` lists options.
 
 The worker accepts two waiting tasks; the GUI accepts one active task. Inputs are capped
 at 60 seconds / 10,000 characters; synthesized output at two minutes. Models unload

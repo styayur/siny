@@ -13,6 +13,8 @@ pub struct Settings {
     pub voice: i32,
     pub speed: f32,
     pub microphone: String,
+    pub hotkey: String,
+    pub auto_paste: bool,
     pub idle_unload_seconds: u64,
     pub terms: Vec<Term>,
 }
@@ -26,6 +28,8 @@ impl Default for Settings {
             voice: 3,
             speed: 1.0,
             microphone: String::new(),
+            hotkey: "Ctrl+Alt+D".into(),
+            auto_paste: false,
             idle_unload_seconds: 60,
             terms: Vec::new(),
         }
@@ -43,6 +47,9 @@ impl Settings {
         }
         if !["auto", "zh", "en", "ja", "ko", "yue"].contains(&self.language.as_str()) {
             return Err("Unsupported SenseVoice language".into());
+        }
+        if self.hotkey.is_empty() || self.hotkey.len() > 80 || self.hotkey.contains('\0') {
+            return Err("Invalid dictation shortcut".into());
         }
         crate::terms::validate(&self.terms)
     }
@@ -105,12 +112,21 @@ mod tests {
         std::fs::remove_file(&temp).unwrap();
         Settings::default().save(&path).unwrap();
         assert_eq!(Settings::load(&path).unwrap().threads, 2);
+        let updated = Settings {
+            language: "zh".into(),
+            auto_paste: true,
+            ..Settings::default()
+        };
+        updated.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap().language, "zh");
+        assert!(Settings::load(&path).unwrap().auto_paste);
         let invalid = Settings {
             threads: 99,
             ..Settings::default()
         };
         assert!(invalid.save(&path).is_err());
         assert_eq!(Settings::load(&path).unwrap().threads, 2);
+        assert_eq!(Settings::load(&path).unwrap().language, "zh");
         std::fs::remove_file(&path).unwrap();
         std::fs::remove_dir(&dir).unwrap();
     }
