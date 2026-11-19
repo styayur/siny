@@ -35,6 +35,19 @@ impl SherpaBackend {
     pub fn loaded(&self) -> (bool, bool) {
         (self.asr.is_some(), self.tts.is_some())
     }
+    fn tts(&mut self) -> Result<&Arc<SherpaKokoroEngine>> {
+        if self.tts.is_none() {
+            let paths = tinytts::paths::Paths::new(&self.base);
+            let model = paths
+                .model_files(Some(&self.path(&self.settings.kokoro_dir)))
+                .map_err(|e| e.to_string())?;
+            self.tts = Some(Arc::new(
+                SherpaKokoroEngine::new(&model, self.settings.threads)
+                    .map_err(|e| e.to_string())?,
+            ));
+        }
+        self.tts.as_ref().ok_or("TTS did not load".into())
+    }
 }
 impl Backend for SherpaBackend {
     fn recognize(&mut self, audio: &Audio, cancel: &Cancel) -> Result<String> {
@@ -68,41 +81,56 @@ impl Backend for SherpaBackend {
         tinystt::asr::clean_transcript(&result).map_err(|e| e.to_string())
     }
     fn synthesize(&mut self, text: &str, cancel: &Cancel) -> Result<Audio> {
+        let mut output: Option<Audio> = None;
+        self.synthesize_stream(text, cancel, &mut |audio| {
+            let accumulated = output.get_or_insert_with(|| Audio { samples: Vec::new(), sample_rate: audio.sample_rate });
+            if accumulated.sample_rate != audio.sample_rate || accumulated.samples.len().saturating_add(audio.samples.len()) > audio.sample_rate as usize * 120 {
+                return Err("Reverse verification audio exceeds two minutes; use Read aloud or Export WAV for long text".into());
+            }
+            accumulated.samples.extend(audio.samples);
+            Ok(())
+        })?;
+        let output = output.ok_or("No speech generated")?;
+        output.validate(120)?;
+        Ok(output)
+    }
+    fn synthesize_stream(
+        &mut self,
+        text: &str,
+        cancel: &Cancel,
+        emit: &mut dyn FnMut(Audio) -> Result<()>,
+    ) -> Result<()> {
         check_cancel(cancel)?;
-        if self.tts.is_none() {
-            let paths = tinytts::paths::Paths::new(&self.base);
-            let model = paths
-                .model_files(Some(&self.path(&self.settings.kokoro_dir)))
-                .map_err(|e| e.to_string())?;
-            self.tts = Some(Arc::new(
-                SherpaKokoroEngine::new(&model, self.settings.threads)
-                    .map_err(|e| e.to_string())?,
-            ));
-        }
-        let engine = self.tts.as_ref().expect("loaded TTS");
-        if !engine.voices().iter().any(|v| v.id == self.settings.voice) {
+        let voice = self.settings.voice;
+        let speed = self.settings.speed;
+        let engine = self.tts()?;
+        if !engine.voices().iter().any(|v| v.id == voice) {
             return Err("Voice ID is absent from this model".into());
         }
-        let mut output = Audio {
-            samples: Vec::new(),
-            sample_rate: engine.sample_rate(),
-        };
         for segment in tinytts::text_segmenter::segment(text) {
             check_cancel(cancel)?;
             let chunk = engine
-                .synthesize(&segment, self.settings.voice, self.settings.speed, cancel)
+                .synthesize(&segment, voice, speed, cancel)
                 .map_err(|e| e.to_string())?;
-            if chunk.sample_rate != output.sample_rate
-                || output.samples.len().saturating_add(chunk.samples.len())
-                    > output.sample_rate as usize * 120
-            {
-                return Err("Speech exceeds two-minute output limit; split the text".into());
-            }
-            output.samples.extend(chunk.samples);
+            let audio = Audio {
+                samples: chunk.samples,
+                sample_rate: chunk.sample_rate,
+            };
+            audio.validate(120)?;
+            emit(audio)?;
         }
-        check_cancel(cancel)?;
-        output.validate(120)?;
-        Ok(output)
+        check_cancel(cancel)
+    }
+    fn voices(&mut self) -> Result<Vec<siny_core::Voice>> {
+        Ok(self
+            .tts()?
+            .voices()
+            .into_iter()
+            .map(|voice| siny_core::Voice {
+                id: voice.id,
+                name: voice.name,
+            })
+            .collect())
     }
     fn unload(&mut self) {
         self.asr = None;

@@ -46,12 +46,27 @@ impl Devices {
         audio.validate(120)?;
         let player = Player::new().map_err(|e| e.to_string())?;
         let (sender, receiver) = tinytts::audio::queue::bounded(1);
-        player.start_feeding(receiver);
+        player.start_feeding(receiver).map_err(|e| e.to_string())?;
         sender
             .send(tinytts::tts::AudioChunk {
                 samples: audio.samples,
                 sample_rate: audio.sample_rate,
             })
+            .map_err(|e| e.to_string())?;
+        self.player = Some(player);
+        Ok(())
+    }
+    pub fn play_stream(&mut self, audio: std::sync::mpsc::Receiver<Audio>) -> Result<()> {
+        if self.recording.is_some() {
+            return Err("Finish recording before playback".into());
+        }
+        self.stop_playback();
+        let player = Player::new().map_err(|e| e.to_string())?;
+        player
+            .start_feeding(audio.into_iter().map(|audio| tinytts::tts::AudioChunk {
+                samples: audio.samples,
+                sample_rate: audio.sample_rate,
+            }))
             .map_err(|e| e.to_string())?;
         self.player = Some(player);
         Ok(())

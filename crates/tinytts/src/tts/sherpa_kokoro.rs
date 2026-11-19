@@ -1,6 +1,5 @@
 //! sherpa-onnx backed Kokoro TTS engine.
 
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -9,7 +8,7 @@ use sherpa_onnx::{
     OfflineTtsModelConfig,
 };
 
-use super::engine::{AudioChunk, TtsEngine, Voice, KOKORO_VOICES};
+use super::engine::{voice_catalog, AudioChunk, TtsEngine, Voice};
 use crate::error::{Result, TinyTtsError};
 use crate::paths::ModelPaths;
 
@@ -50,7 +49,7 @@ impl SherpaKokoroEngine {
         })?;
 
         let sample_rate = tts.sample_rate() as u32;
-        let voices = load_voices(&model.voices_txt, tts.num_speakers());
+        let voices = voice_catalog(&model.voices_txt, tts.num_speakers().max(0) as usize);
 
         Ok(Self {
             tts: Arc::new(tts),
@@ -116,44 +115,14 @@ impl TtsEngine for SherpaKokoroEngine {
     }
 }
 
-fn load_voices(voices_txt: &Path, num_speakers: i32) -> Vec<Voice> {
-    let count = num_speakers.max(0) as usize;
-
-    if let Ok(text) = std::fs::read_to_string(voices_txt) {
-        let names: Vec<String> = text
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(String::from)
-            .collect();
-        if !names.is_empty() {
-            return names
-                .into_iter()
-                .take(count)
-                .enumerate()
-                .map(|(i, name)| Voice { id: i as i32, name })
-                .collect();
-        }
-    }
-
-    KOKORO_VOICES
-        .iter()
-        .take(count)
-        .enumerate()
-        .map(|(i, name)| Voice {
-            id: i as i32,
-            name: (*name).to_string(),
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn original_voice_ids_remain_stable_for_53_speaker_models() {
-        let voices = load_voices(Path::new("missing-native-voice-fixture.txt"), 53);
+        let voices = voice_catalog(Path::new("missing-native-voice-fixture.txt"), 53);
         assert_eq!(voices.len(), 53);
         assert_eq!(voices[3].name, "af_heart");
         assert_eq!(voices[45].name, "zf_xiaobei");
@@ -163,7 +132,7 @@ mod tests {
 
     #[test]
     fn reviewed_54th_speaker_is_exposed_without_shifting_existing_ids() {
-        let voices = load_voices(Path::new("missing-native-voice-fixture.txt"), 54);
+        let voices = voice_catalog(Path::new("missing-native-voice-fixture.txt"), 54);
         assert_eq!(voices.len(), 54);
         assert_eq!(voices[3].name, "af_heart");
         assert_eq!(voices[45].id, 45);

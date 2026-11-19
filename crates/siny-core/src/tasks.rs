@@ -8,6 +8,12 @@ use std::sync::{
 use std::time::Duration;
 
 pub type Cancel = Arc<AtomicBool>;
+pub const STREAM_QUEUE_CAPACITY: usize = 2;
+#[derive(Debug, Clone)]
+pub struct Voice {
+    pub id: i32,
+    pub name: String,
+}
 #[derive(Debug, Clone)]
 pub struct Audio {
     pub samples: Vec<f32>,
@@ -32,7 +38,14 @@ impl Audio {
 pub enum Operation {
     Dictate(Audio),
     Read(String),
+    ReadStream(String),
+    ExportWav {
+        text: String,
+        path: std::path::PathBuf,
+    },
+    Voices,
     DictateThenRead(Audio),
+    DictateThenReadStream(Audio),
     Verify(String),
     Unload,
 }
@@ -43,16 +56,30 @@ pub struct Outcome {
     pub recognized: Option<String>,
     pub similarity: Option<f32>,
     pub elapsed_seconds: f64,
+    pub voices: Option<Vec<Voice>>,
+    pub saved: Option<std::path::PathBuf>,
 }
 pub trait Backend: Send + 'static {
     fn recognize(&mut self, audio: &Audio, cancel: &Cancel) -> Result<String>;
     fn synthesize(&mut self, text: &str, cancel: &Cancel) -> Result<Audio>;
+    fn synthesize_stream(
+        &mut self,
+        text: &str,
+        cancel: &Cancel,
+        emit: &mut dyn FnMut(Audio) -> Result<()>,
+    ) -> Result<()> {
+        emit(self.synthesize(text, cancel)?)
+    }
+    fn voices(&mut self) -> Result<Vec<Voice>> {
+        Err("Voice metadata is unavailable from this backend".into())
+    }
     fn unload(&mut self);
 }
 struct Request {
     operation: Operation,
     cancel: Cancel,
     reply: SyncSender<Result<Outcome>>,
+    audio: SyncSender<Audio>,
 }
 enum Message {
     Work(Request),
@@ -61,6 +88,7 @@ enum Message {
 pub struct Job {
     pub cancel: Cancel,
     pub result: Receiver<Result<Outcome>>,
+    pub audio: Option<Receiver<Audio>>,
 }
 impl Job {
     pub fn cancel(&self) {
@@ -75,6 +103,7 @@ impl Drop for Job {
 pub struct Scheduler {
     sender: SyncSender<Message>,
     shutdown: Cancel,
+    active: Arc<std::sync::Mutex<Option<Cancel>>>,
 }
 impl Scheduler {
     pub fn new(mut backend: impl Backend, settings: Settings) -> Result<Self> {
@@ -82,19 +111,31 @@ impl Scheduler {
         let (sender, receiver) = mpsc::sync_channel::<Message>(2);
         let shutdown = Arc::new(AtomicBool::new(false));
         let stop = shutdown.clone();
+        let active = Arc::new(std::sync::Mutex::new(None::<Cancel>));
+        let active_job = active.clone();
         std::thread::Builder::new()
             .name("siny-inference".into())
             .spawn(move || {
                 while !stop.load(Ordering::Acquire) {
                     match receiver.recv_timeout(Duration::from_secs(settings.idle_unload_seconds)) {
                         Ok(Message::Work(request)) => {
+                            if let Ok(mut active) = active_job.lock() {
+                                *active = Some(request.cancel.clone());
+                            }
+                            if stop.load(Ordering::Acquire) {
+                                request.cancel.store(true, Ordering::Release);
+                            }
                             let result = execute(
                                 &mut backend,
                                 request.operation,
                                 &settings,
                                 &request.cancel,
+                                &request.audio,
                             );
                             let _ = request.reply.send(result);
+                            if let Ok(mut active) = active_job.lock() {
+                                *active = None;
+                            }
                         }
                         Ok(Message::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                         Err(mpsc::RecvTimeoutError::Timeout) => backend.unload(),
@@ -103,29 +144,49 @@ impl Scheduler {
                 backend.unload();
             })
             .map_err(|e| e.to_string())?;
-        Ok(Self { sender, shutdown })
+        Ok(Self {
+            sender,
+            shutdown,
+            active,
+        })
     }
     pub fn submit(&self, operation: Operation) -> Result<Job> {
         match &operation {
-            Operation::Dictate(a) | Operation::DictateThenRead(a) => a.validate(60)?,
-            Operation::Read(t) | Operation::Verify(t) => validate_text(t)?,
-            Operation::Unload => (),
+            Operation::Dictate(a)
+            | Operation::DictateThenRead(a)
+            | Operation::DictateThenReadStream(a) => a.validate(60)?,
+            Operation::Read(t) | Operation::Verify(t) => validate_text(t, 10_000)?,
+            Operation::ReadStream(t) | Operation::ExportWav { text: t, .. } => {
+                validate_text(t, 1_000_000)?
+            }
+            Operation::Unload | Operation::Voices => (),
         }
         let cancel = Arc::new(AtomicBool::new(false));
         let (reply, result) = mpsc::sync_channel(1);
+        let (audio, chunks) = mpsc::sync_channel(STREAM_QUEUE_CAPACITY);
         self.sender
             .try_send(Message::Work(Request {
                 operation,
                 cancel: cancel.clone(),
                 reply,
+                audio,
             }))
             .map_err(|e| e.to_string())?;
-        Ok(Job { cancel, result })
+        Ok(Job {
+            cancel,
+            result,
+            audio: Some(chunks),
+        })
     }
 }
 impl Drop for Scheduler {
     fn drop(&mut self) {
         self.shutdown.store(true, Ordering::Release);
+        if let Ok(active) = self.active.lock() {
+            if let Some(cancel) = active.as_ref() {
+                cancel.store(true, Ordering::Release);
+            }
+        }
         let _ = self.sender.try_send(Message::Shutdown);
     }
 }
@@ -136,9 +197,9 @@ pub fn check_cancel(cancel: &Cancel) -> Result<()> {
         Ok(())
     }
 }
-fn validate_text(text: &str) -> Result<()> {
-    if text.trim().is_empty() || text.chars().count() > 10_000 || text.contains('\0') {
-        return Err("Text requires 1–10000 characters without NUL".into());
+fn validate_text(text: &str, limit: usize) -> Result<()> {
+    if text.trim().is_empty() || text.chars().count() > limit || text.contains('\0') {
+        return Err(format!("Text requires 1–{limit} characters without NUL"));
     }
     Ok(())
 }
@@ -147,6 +208,7 @@ fn execute(
     operation: Operation,
     settings: &Settings,
     cancel: &Cancel,
+    audio_sender: &SyncSender<Audio>,
 ) -> Result<Outcome> {
     check_cancel(cancel)?;
     let started = std::time::Instant::now();
@@ -156,22 +218,45 @@ fn execute(
         recognized: None,
         similarity: None,
         elapsed_seconds: 0.0,
+        voices: None,
+        saved: None,
     };
     let verify = matches!(&operation, Operation::Verify(_));
     match operation {
         Operation::Unload => backend.unload(),
+        Operation::Voices => outcome.voices = Some(backend.voices()?),
+        Operation::ReadStream(text) => {
+            outcome.text = terms::apply_bounded(&text, &settings.terms, 4_000_000)?;
+            validate_text(&outcome.text, 1_000_000)?;
+            stream(backend, &outcome.text, cancel, audio_sender)?;
+        }
+        Operation::DictateThenReadStream(audio) => {
+            outcome.text = terms::apply_bounded(
+                &backend.recognize(&audio, cancel)?,
+                &settings.terms,
+                4_000_000,
+            )?;
+            validate_text(&outcome.text, 1_000_000)?;
+            stream(backend, &outcome.text, cancel, audio_sender)?;
+        }
+        Operation::ExportWav { text, path } => {
+            outcome.text = terms::apply_bounded(&text, &settings.terms, 4_000_000)?;
+            validate_text(&outcome.text, 1_000_000)?;
+            crate::wav::export(backend, &outcome.text, &path, cancel)?;
+            outcome.saved = Some(path);
+        }
         Operation::Dictate(audio) => {
             outcome.text = terms::apply(&backend.recognize(&audio, cancel)?, &settings.terms)
         }
         Operation::Read(text) | Operation::Verify(text) => {
             outcome.text = terms::apply(&text, &settings.terms);
-            validate_text(&outcome.text)?;
+            validate_text(&outcome.text, 10_000)?;
             outcome.audio = Some(backend.synthesize(&outcome.text, cancel)?);
         }
         Operation::DictateThenRead(audio) => {
             outcome.text = terms::apply(&backend.recognize(&audio, cancel)?, &settings.terms);
             check_cancel(cancel)?;
-            validate_text(&outcome.text)?;
+            validate_text(&outcome.text, 10_000)?;
             outcome.audio = Some(backend.synthesize(&outcome.text, cancel)?);
         }
     }
@@ -190,6 +275,29 @@ fn execute(
     check_cancel(cancel)?;
     outcome.elapsed_seconds = started.elapsed().as_secs_f64();
     Ok(outcome)
+}
+fn stream(
+    backend: &mut impl Backend,
+    text: &str,
+    cancel: &Cancel,
+    audio_sender: &SyncSender<Audio>,
+) -> Result<()> {
+    backend.synthesize_stream(text, cancel, &mut |mut audio| {
+        audio.validate(120)?;
+        loop {
+            check_cancel(cancel)?;
+            match audio_sender.try_send(audio) {
+                Ok(()) => return Ok(()),
+                Err(mpsc::TrySendError::Full(chunk)) => {
+                    audio = chunk;
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(mpsc::TrySendError::Disconnected(_)) => {
+                    return Err("Playback consumer closed".into())
+                }
+            }
+        }
+    })
 }
 #[cfg(test)]
 mod tests {

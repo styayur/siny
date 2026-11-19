@@ -8,4 +8,4 @@ pub use engine::{AudioChunk, TtsEngine, Voice};
 #[cfg(feature = "native")]
 pub use sherpa_kokoro::SherpaKokoroEngine;
 
-pub use engine::KOKORO_VOICES;
+pub use engine::{voice_catalog, KOKORO_VOICES};

@@ -3442,6 +3442,7 @@ dependencies = [
 name = "siny-core"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "hound",
  "serde",
  "toml",
 ]

@@ -78,11 +78,14 @@ pub fn import(path: &Path, app: LegacyApp, current: &Settings) -> Result<Setting
             );
             candidate.threads = old.num_threads;
             candidate.speed = old.speed;
-            candidate.voice = tinytts::tts::KOKORO_VOICES
-                .iter()
-                .position(|name| *name == old.voice)
-                .ok_or("Legacy voice is absent from the reviewed Kokoro voice catalog")?
-                as i32;
+            candidate.voice = tinytts::tts::voice_catalog(
+                &Path::new(&candidate.kokoro_dir).join("voices.txt"),
+                1024,
+            )
+            .iter()
+            .find(|voice| voice.name == old.voice)
+            .map(|voice| voice.id)
+            .ok_or("Legacy voice is absent from the selected model voice catalog")?;
         }
     }
     candidate.validate()?;
@@ -121,6 +124,8 @@ mod tests {
         assert!(import(&path, LegacyApp::TinyTts, &combined).is_err());
         std::fs::write(&path, "num_threads = 99\n").unwrap();
         assert!(import(&path, LegacyApp::TinyStt, &combined).is_err());
-        std::fs::remove_dir_all(dir).unwrap();
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(config).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 }

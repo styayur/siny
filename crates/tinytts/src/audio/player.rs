@@ -5,17 +5,20 @@
 //! to the sink, and the sink plays them back in order.
 
 use std::num::NonZero;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use rodio::buffer::SamplesBuffer;
 use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player as RodioPlayer};
 
-use super::queue::ChunkReceiver;
 use crate::error::{Result, TinyTtsError};
+use crate::tts::AudioChunk;
 
 pub struct Player {
     _stream: MixerDeviceSink,
     sink: Arc<RodioPlayer>,
+    producer_done: Arc<AtomicBool>,
+    stopped: Arc<AtomicBool>,
 }
 
 impl Player {
@@ -28,17 +31,32 @@ impl Player {
         Ok(Self {
             _stream: stream,
             sink: Arc::new(sink),
+            producer_done: Arc::new(AtomicBool::new(true)),
+            stopped: Arc::new(AtomicBool::new(false)),
         })
     }
 
     /// Spawn a feeder thread that moves chunks from the bounded queue into the
     /// sink. The thread exits when the queue is disconnected (producer done).
-    pub fn start_feeding(&self, rx: ChunkReceiver) {
+    pub fn start_feeding(
+        &self,
+        rx: impl IntoIterator<Item = AudioChunk> + Send + 'static,
+    ) -> Result<()> {
         let sink = Arc::clone(&self.sink);
-        let _ = std::thread::Builder::new()
+        let done = self.producer_done.clone();
+        let stopped = self.stopped.clone();
+        self.producer_done.store(false, Ordering::Release);
+        std::thread::Builder::new()
             .name("tinytts-player".to_string())
             .spawn(move || {
                 for chunk in rx {
+                    // A bounded channel alone is insufficient: rodio's sink also needs backpressure.
+                    while sink.len() >= 2 && !stopped.load(Ordering::Acquire) {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    if stopped.load(Ordering::Acquire) {
+                        break;
+                    }
                     let Some(sample_rate) = NonZero::new(chunk.sample_rate) else {
                         continue;
                     };
@@ -46,7 +64,13 @@ impl Player {
                         SamplesBuffer::new(NonZero::<u16>::MIN, sample_rate, chunk.samples);
                     sink.append(source);
                 }
-            });
+                done.store(true, Ordering::Release);
+            })
+            .map_err(|error| {
+                self.producer_done.store(true, Ordering::Release);
+                TinyTtsError::AudioDeviceUnavailable(error.to_string())
+            })?;
+        Ok(())
     }
 
     pub fn pause(&self) {
@@ -63,6 +87,7 @@ impl Player {
 
     /// Stop playback and clear any queued sounds.
     pub fn stop(&self) {
+        self.stopped.store(true, Ordering::Release);
         self.sink.stop();
     }
 
@@ -73,7 +98,13 @@ impl Player {
 
     /// True once the sink has finished playing everything it received.
     pub fn is_empty(&self) -> bool {
-        self.sink.empty()
+        self.stopped.load(Ordering::Acquire)
+            || (self.producer_done.load(Ordering::Acquire) && self.sink.empty())
+    }
+}
+impl Drop for Player {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -95,7 +126,7 @@ mod tests {
         assert!(!player.is_paused());
 
         let (tx, rx) = queue::bounded(1);
-        player.start_feeding(rx);
+        player.start_feeding(rx)?;
         let sample_rate = 24_000;
         let samples = (0..sample_rate / 4)
             .map(|index| (TAU * 440.0 * index as f32 / sample_rate as f32).sin() * 0.05)

@@ -3,6 +3,9 @@
 pub mod settings;
 pub mod tasks;
 pub mod terms;
+pub mod wav;
 pub use settings::Settings;
-pub use tasks::{Audio, Backend, Cancel, Job, Operation, Outcome, Scheduler};
+pub use tasks::{Audio, Backend, Cancel, Job, Operation, Outcome, Scheduler, Voice};
 pub type Result<T> = std::result::Result<T, String>;
+#[cfg(test)]
+mod stream_tests;

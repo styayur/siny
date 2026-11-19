@@ -16,6 +16,7 @@ pub struct Settings {
     pub hotkey: String,
     pub auto_paste: bool,
     pub close_to_tray: bool,
+    pub retain_recording: bool,
     pub idle_unload_seconds: u64,
     pub terms: Vec<Term>,
 }
@@ -32,6 +33,7 @@ impl Default for Settings {
             hotkey: "Ctrl+Alt+D".into(),
             auto_paste: false,
             close_to_tray: true,
+            retain_recording: false,
             idle_unload_seconds: 60,
             terms: Vec::new(),
         }

@@ -54,28 +54,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 fn probe_output() -> Result<(), String> {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
     let player = tinytts::audio::player::Player::new().map_err(|e| e.to_string())?;
     player.pause();
     if !player.is_paused() {
         return Err("Pause failed".into());
     }
     let (sender, receiver) = tinytts::audio::queue::bounded(1);
-    player.start_feeding(receiver);
-    sender
-        .send(tinytts::tts::AudioChunk {
-            samples: (0..12000)
-                .map(|i| (std::f32::consts::TAU * 440.0 * i as f32 / 24000.0).sin() * 0.02)
-                .collect(),
-            sample_rate: 24000,
-        })
-        .map_err(|e| e.to_string())?;
-    drop(sender);
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while player.pending() == 0 && Instant::now() < deadline {
+    player.start_feeding(receiver).map_err(|e| e.to_string())?;
+    let producer_done = Arc::new(AtomicBool::new(false));
+    let completed = producer_done.clone();
+    std::thread::spawn(move || {
+        for _ in 0..8 {
+            if sender
+                .send(tinytts::tts::AudioChunk {
+                    samples: (0..2400)
+                        .map(|i| (std::f32::consts::TAU * 440.0 * i as f32 / 24000.0).sin() * 0.02)
+                        .collect(),
+                    sample_rate: 24000,
+                })
+                .is_err()
+            {
+                return;
+            }
+        }
+        completed.store(true, Ordering::Release);
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while player.pending() < 2 && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
     }
-    if player.pending() == 0 {
-        return Err("Feeder never queued audio".into());
+    if player.pending() != 2 || producer_done.load(Ordering::Acquire) {
+        return Err(
+            "Paused sink must hold exactly two chunks and apply producer backpressure".into(),
+        );
     }
     player.resume();
     if player.is_paused() {
@@ -86,6 +101,9 @@ fn probe_output() -> Result<(), String> {
     }
     if !player.is_empty() {
         return Err("Output did not drain".into());
+    }
+    if !producer_done.load(Ordering::Acquire) {
+        return Err("Producer did not finish after resume".into());
     }
     player.stop();
     Ok(())

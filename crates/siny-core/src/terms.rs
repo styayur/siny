@@ -21,6 +21,9 @@ pub fn validate(terms: &[Term]) -> Result<()> {
 /// Longest exact Unicode match, once per input position; replacements never cascade.
 /// Explicit substring rules are shared by recognition and synthesis, not model tuning.
 pub fn apply(text: &str, terms: &[Term]) -> String {
+    apply_bounded(text, terms, usize::MAX).expect("unlimited replacement bound")
+}
+pub fn apply_bounded(text: &str, terms: &[Term], max_bytes: usize) -> Result<String> {
     let mut output = String::new();
     let mut tail = text;
     while !tail.is_empty() {
@@ -29,15 +32,21 @@ pub fn apply(text: &str, terms: &[Term]) -> String {
             .filter(|t| !t.from.is_empty() && tail.starts_with(&t.from))
             .max_by_key(|t| t.from.len())
         {
+            if term.to.len() > max_bytes.saturating_sub(output.len()) {
+                return Err("Terminology output exceeds text limit".into());
+            }
             output.push_str(&term.to);
             tail = &tail[term.from.len()..];
         } else {
             let c = tail.chars().next().expect("nonempty tail");
+            if c.len_utf8() > max_bytes.saturating_sub(output.len()) {
+                return Err("Terminology output exceeds text limit".into());
+            }
             output.push(c);
             tail = &tail[c.len_utf8()..];
         }
     }
-    output
+    Ok(output)
 }
 /// Canonicalize standalone English zero..ten tokens to match ASR inverse-text normalization.
 /// This intentionally is not a general number parser (e.g. twenty one / dates / Chinese).
