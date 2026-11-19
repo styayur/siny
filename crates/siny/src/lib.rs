@@ -7,3 +7,5 @@ pub mod cli;
 pub mod migration;
 #[cfg(feature = "gui")]
 pub mod services;
+#[cfg(feature = "gui")]
+pub mod tray;

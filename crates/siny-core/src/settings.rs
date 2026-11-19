@@ -15,6 +15,7 @@ pub struct Settings {
     pub microphone: String,
     pub hotkey: String,
     pub auto_paste: bool,
+    pub close_to_tray: bool,
     pub idle_unload_seconds: u64,
     pub terms: Vec<Term>,
 }
@@ -30,6 +31,7 @@ impl Default for Settings {
             microphone: String::new(),
             hotkey: "Ctrl+Alt+D".into(),
             auto_paste: false,
+            close_to_tray: true,
             idle_unload_seconds: 60,
             terms: Vec::new(),
         }
