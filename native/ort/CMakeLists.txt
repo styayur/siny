@@ -50,6 +50,12 @@ function(siny_collect_archive target)
     endif()
   endforeach()
 endfunction()
+# The public interface owns ONNX/protobuf and the other external link edges.
+# Component archive targets alone carry include dependencies, not all link edges.
+if(NOT TARGET onnxruntime)
+  message(FATAL_ERROR "Required public ORT interface missing")
+endif()
+siny_collect_archive(onnxruntime)
 foreach(component onnxruntime_session onnxruntime_optimizer onnxruntime_providers
     onnxruntime_util onnxruntime_framework onnxruntime_graph onnxruntime_mlas
     onnxruntime_common onnxruntime_flatbuffers)
@@ -60,6 +66,11 @@ foreach(component onnxruntime_session onnxruntime_optimizer onnxruntime_provider
 endforeach()
 get_property(archive_targets GLOBAL PROPERTY siny_archive_targets)
 get_property(archive_inputs GLOBAL PROPERTY siny_archive_inputs)
+foreach(required onnx onnx_proto)
+  if(NOT "${required}" IN_LIST archive_targets)
+    message(FATAL_ERROR "Missing ONNX archive in the public dependency graph: ${required}")
+  endif()
+endforeach()
 list(LENGTH archive_targets archive_count)
 if(archive_count LESS 9)
   message(FATAL_ERROR "Incomplete native dependency graph")
