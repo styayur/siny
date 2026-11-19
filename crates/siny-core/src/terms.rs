@@ -39,10 +39,32 @@ pub fn apply(text: &str, terms: &[Term]) -> String {
     }
     output
 }
+/// Canonicalize standalone English zero..ten tokens to match ASR inverse-text normalization.
+/// This intentionally is not a general number parser (e.g. twenty one / dates / Chinese).
+fn normalize_numbers(text: &str) -> String {
+    const NUMBERS: [&str; 11] = [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    ];
+    text.split_inclusive(|c: char| !c.is_alphanumeric())
+        .map(|piece| {
+            let end = piece
+                .find(|c: char| !c.is_alphanumeric())
+                .unwrap_or(piece.len());
+            let word = &piece[..end];
+            if let Some(n) = NUMBERS.iter().position(|v| word.eq_ignore_ascii_case(v)) {
+                format!("{}{}", n, &piece[end..])
+            } else {
+                piece.to_string()
+            }
+        })
+        .collect()
+}
+
 /// Character edit similarity after removing punctuation/case; diagnostic, not an accuracy guarantee.
 pub fn similarity(expected: &str, actual: &str) -> f32 {
     let clean = |s: &str| {
-        s.chars()
+        normalize_numbers(s)
+            .chars()
             .flat_map(char::to_lowercase)
             .filter(|c| c.is_alphanumeric())
             .collect::<Vec<_>>()
@@ -95,6 +117,8 @@ mod tests {
     #[test]
     fn verification_exposes_omissions() {
         assert_eq!(similarity("Hello, 世界!", "hello世界"), 1.0);
+        assert_eq!(similarity("One, two, three.", "1,2, three."), 1.0);
+        assert!(similarity("one word", "word") < 1.0);
         assert!(similarity("every word must be read", "word read") < 0.8);
     }
 }

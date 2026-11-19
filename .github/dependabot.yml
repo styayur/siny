@@ -3,7 +3,8 @@ updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: fortnightly
+      interval: cron
+      cronjob: "0 1 1,15 * *"
     open-pull-requests-limit: 3
     groups:
       compatible:
@@ -11,7 +12,8 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: fortnightly
+      interval: cron
+      cronjob: "0 1 1,15 * *"
     open-pull-requests-limit: 3
     groups:
       actions:

@@ -3429,6 +3429,7 @@ dependencies = [
  "eframe",
  "rfd",
  "serde",
+ "sherpa-onnx",
  "siny-core",
  "tinystt",
  "tinytts",

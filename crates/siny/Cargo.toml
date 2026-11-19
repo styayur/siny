@@ -6,9 +6,10 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/styayur/siny"
 [features]
 default = ["gui"]
-sherpa = ["tinystt/native", "tinytts/native"]
+sherpa = ["tinystt/native", "tinytts/native", "dep:sherpa-onnx"]
 gui = ["sherpa", "dep:eframe", "dep:rfd"]
 [dependencies]
+sherpa-onnx = { workspace = true, optional = true }
 rfd = { version = "0.17", optional = true }
 siny-core = { path = "../siny-core" }
 tinystt = { path = "../tinystt", default-features = false }
@@ -22,3 +23,7 @@ path = "src/main.rs"
 [[example]]
 name = "acceptance"
 required-features = ["sherpa"]
+
+[[example]]
+name = "devices"
+required-features = ["gui"]

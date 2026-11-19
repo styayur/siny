@@ -34,3 +34,9 @@ Desktop reader/dictator, one editable transcript, Listen → Text → Speak stri
 record/read actions, visible reverse transcript. Neutral paper/graphite and blue focus use
 the inherited egui 0.37 accessible controls, 4 px spacing base and 40 px action height.
 No dashboard cards, animations or chat bubbles. Real window inspection is required.
+
+The first integrated native round trip failed at 0.833 because SenseVoice ITN emitted
+`1,2, three` for the spoken `One, two, three`. The comparison now canonicalizes standalone
+English zero..ten tokens, with explicit equivalence and omission regressions. The input
+sample and 0.85 acceptance threshold are retained. This does not provide general numeric,
+date or multilingual semantic normalization. The GUI similarity remains diagnostic.

@@ -30,6 +30,26 @@ struct Report {
     cases: Vec<Case>,
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Known 12 kHz input aliases at 4 kHz after 48 -> 16 kHz linear decimation.
+    // Compare that deterministic fixture with the production native low-pass path.
+    let signal: Vec<f32> = (0..48000)
+        .map(|i| (std::f32::consts::TAU * 12000.0 * i as f32 / 48000.0).sin() * 0.5)
+        .collect();
+    let rms = |samples: &[f32]| {
+        (samples.iter().map(|v| f64::from(*v).powi(2)).sum::<f64>() / samples.len() as f64).sqrt()
+    };
+    let linear = tinystt::audio::resample_offline(&signal, 48000, 16000)?;
+    let filter =
+        sherpa_onnx::LinearResampler::create(48000, 16000).ok_or("Cannot initialize filter")?;
+    let started = Instant::now();
+    let filtered = filter.resample(&signal, true);
+    assert!(rms(&filtered[100..filtered.len() - 100]) < rms(&linear) * 0.01);
+    println!(
+        "RESAMPLING linear_rms={} filtered_rms={} cpu_wall_seconds={}",
+        rms(&linear),
+        rms(&filtered[100..filtered.len() - 100]),
+        started.elapsed().as_secs_f64()
+    );
     let settings = Settings {
         sensevoice_dir: std::env::var("SINY_TEST_ASR")?,
         kokoro_dir: std::env::var("TINY_TTS_TEST_MODEL")?,

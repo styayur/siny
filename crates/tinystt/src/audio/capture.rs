@@ -11,7 +11,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
 
 use crate::audio::buffer::RecordingBuffer;
-use crate::audio::convert::{downmix_interleaved, StreamingResampler};
+use crate::audio::convert::downmix_interleaved;
 use crate::audio::TARGET_SAMPLE_RATE;
 use crate::error::{Result, TinySttError};
 
@@ -193,13 +193,17 @@ fn build_stream(
             let callback_max = max_reached.clone();
             let callback_dropped = dropped_callbacks.clone();
             let callback_events = event_tx.clone();
-            let mut resampler = StreamingResampler::new(input_rate, TARGET_SAMPLE_RATE)?;
+            let resampler =
+                sherpa_onnx::LinearResampler::create(input_rate as i32, TARGET_SAMPLE_RATE as i32)
+                    .ok_or_else(|| {
+                        TinySttError::Resample("Cannot create bandlimited resampler".into())
+                    })?;
             device.build_input_stream(
                 *config,
                 move |data: &[$sample], _| {
                     if let Ok(mut target) = callback_buffer.try_lock() {
                         let mono = downmix_interleaved(data, channels);
-                        let converted = resampler.process(&mono);
+                        let converted = resampler.resample(&mono, false);
                         let result = target.append(&converted);
                         if result.limit_reached && !callback_max.swap(true, Ordering::Relaxed) {
                             let _ = callback_events.send(CaptureEvent::MaxReached);
