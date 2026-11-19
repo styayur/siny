@@ -10,7 +10,7 @@
 // 28px title, 18px group headings, 14px body, 12px status. Spacing: 4px unit, 12px controls, 16px sections.
 use crate::{
     backend::SherpaBackend,
-    services::{self, Devices, Shortcuts},
+    services::{self, Devices, PasteTarget, Shortcuts},
 };
 use eframe::egui;
 use siny_core::{Audio, Job, Operation, Scheduler, Settings};
@@ -19,6 +19,7 @@ use std::{path::PathBuf, time::Duration};
 pub struct SinyApp {
     base: PathBuf,
     settings: Settings,
+    applied_settings: Settings,
     scheduler: Option<Scheduler>,
     job: Option<Job>,
     devices: Devices,
@@ -29,6 +30,8 @@ pub struct SinyApp {
     read_after: bool,
     last_audio: Option<Audio>,
     show_settings: bool,
+    dictation_delivery: bool,
+    paste_target: Option<PasteTarget>,
 }
 impl SinyApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -56,13 +59,14 @@ impl SinyApp {
         } else {
             None
         };
-        let shortcuts = Shortcuts::register(cc.egui_ctx.clone());
+        let shortcuts = Shortcuts::register(cc.egui_ctx.clone(), &settings.hotkey);
         let status = match &shortcuts {
             Ok(_) => status,
             Err(e) => format!("{status} · shortcuts: {e}"),
         };
         Self {
             base,
+            applied_settings: settings.clone(),
             settings,
             scheduler,
             job: None,
@@ -74,6 +78,8 @@ impl SinyApp {
             read_after: false,
             last_audio: None,
             show_settings: false,
+            dictation_delivery: false,
+            paste_target: None,
         }
     }
     fn submit(&mut self, operation: Operation) {
@@ -82,6 +88,10 @@ impl SinyApp {
             return;
         }
         self.devices.stop_playback();
+        self.dictation_delivery = matches!(
+            &operation,
+            Operation::Dictate(_) | Operation::DictateThenRead(_)
+        );
         match self
             .scheduler
             .as_ref()
@@ -92,7 +102,11 @@ impl SinyApp {
                 self.job = Some(job);
                 self.status = "Working locally…".into();
             }
-            Err(e) => self.status = e,
+            Err(e) => {
+                self.dictation_delivery = false;
+                self.paste_target = None;
+                self.status = e;
+            }
         }
     }
     fn record(&mut self) {
@@ -100,7 +114,8 @@ impl SinyApp {
             return;
         }
         self.last_audio = None;
-        match self.devices.record(&self.settings.microphone) {
+        self.paste_target = PasteTarget::capture();
+        match self.devices.record(&self.applied_settings.microphone) {
             Ok(()) => self.status = "Recording · release shortcut or Finish".into(),
             Err(e) => self.status = e,
         }
@@ -120,6 +135,8 @@ impl SinyApp {
     }
     fn stop(&mut self) {
         self.devices.cancel();
+        self.dictation_delivery = false;
+        self.paste_target = None;
         if let Some(job) = &self.job {
             job.cancel();
             self.status = "Cancelling · waiting for native work to return".into();
@@ -147,6 +164,8 @@ impl SinyApp {
                     let cancelled = job.cancel.load(std::sync::atomic::Ordering::Acquire);
                     self.job = None;
                     if cancelled {
+                        self.dictation_delivery = false;
+                        self.paste_target = None;
                         self.status = "Cancelled; ready for another task".into();
                         return;
                     }
@@ -157,6 +176,20 @@ impl SinyApp {
                             }
                             self.status =
                                 format!("Completed locally in {:.2} s", outcome.elapsed_seconds);
+                            if self.dictation_delivery && !self.text.is_empty() {
+                                match services::deliver_dictation(
+                                    &self.text,
+                                    self.applied_settings.auto_paste,
+                                    self.paste_target.take(),
+                                ) {
+                                    Ok(message) => self.status.push_str(&format!(" · {message}")),
+                                    Err(error) => {
+                                        self.status = format!(
+                                            "Dictation completed; clipboard/paste failed: {error}"
+                                        )
+                                    }
+                                }
+                            }
                             self.reverse = outcome
                                 .recognized
                                 .map(|s| {
@@ -177,6 +210,8 @@ impl SinyApp {
                         }
                         Err(e) => self.status = e,
                     }
+                    self.dictation_delivery = false;
+                    self.paste_target = None;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => (),
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -207,6 +242,54 @@ impl SinyApp {
             self.devices.player = None;
         }
     }
+
+    fn apply_settings(&mut self, ctx: &egui::Context) {
+        let result = (|| -> siny_core::Result<_> {
+            self.settings.validate()?;
+            let spec = tinystt::hotkey::HotkeySpec::parse(&self.settings.hotkey)
+                .map_err(|e| e.to_string())?;
+            if spec.display == "Ctrl+Alt+S" {
+                return Err("Dictation and clipboard shortcuts must differ".into());
+            }
+            self.settings.hotkey = spec.display;
+            let scheduler = make_scheduler(&self.base, &self.settings)?;
+            self.shortcuts = None; // Join the registration owner so old handles are released first.
+            let shortcuts = Shortcuts::register(ctx.clone(), &self.settings.hotkey)?;
+            self.settings.save(&self.base.join("config/siny.toml"))?;
+            Ok((scheduler, shortcuts))
+        })();
+        match result {
+            Ok((scheduler, shortcuts)) => {
+                self.devices.stop_playback();
+                self.scheduler = Some(scheduler);
+                self.shortcuts = Some(shortcuts);
+                self.applied_settings = self.settings.clone();
+                self.status = "Settings saved and applied · models load on demand".into();
+            }
+            Err(error) => {
+                if self.shortcuts.is_none() {
+                    self.shortcuts =
+                        Shortcuts::register(ctx.clone(), &self.applied_settings.hotkey).ok();
+                }
+                self.status = format!("Settings not applied: {error}");
+            }
+        }
+    }
+
+    fn import_settings(&mut self, app: crate::migration::LegacyApp) {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("TOML configuration", &["toml"])
+            .pick_file()
+        {
+            match crate::migration::import(&path, app, &self.settings) {
+                Ok(candidate) => {
+                    self.settings = candidate;
+                    self.status = "Imported into settings preview · review paths, threads and auto-paste, then Save & apply. Legacy file unchanged.".into();
+                }
+                Err(error) => self.status = format!("Import rejected: {error}"),
+            }
+        }
+    }
 }
 fn make_scheduler(base: &std::path::Path, settings: &Settings) -> siny_core::Result<Scheduler> {
     Scheduler::new(
@@ -231,7 +314,7 @@ impl eframe::App for SinyApp {
             ui.horizontal_wrapped(|ui| {
                 if self.devices.recording.is_some() {
                     if ui.button("Finish recording").clicked() { self.finish(); }
-                } else if ui.add_enabled(idle, egui::Button::new("Record · Ctrl+Alt+D")).clicked() { self.record(); }
+                } else if ui.add_enabled(idle, egui::Button::new(format!("Record · {}", self.applied_settings.hotkey))).clicked() { self.record(); }
                 if ui.add_enabled(idle && !self.text.trim().is_empty(), egui::Button::new("Read aloud")).clicked() { self.submit(Operation::Read(self.text.clone())); }
                 if ui.button("Stop / Cancel").clicked() { self.stop(); }
                 ui.checkbox(&mut self.read_after, "Read after dictation");
@@ -263,18 +346,42 @@ impl eframe::App for SinyApp {
                 ui.horizontal(|ui| { ui.label("SenseVoice"); ui.text_edit_singleline(&mut self.settings.sensevoice_dir); });
                 ui.horizontal(|ui| { ui.label("Kokoro"); ui.text_edit_singleline(&mut self.settings.kokoro_dir); });
                 ui.horizontal(|ui| { ui.label("Microphone (blank = default)"); ui.text_edit_singleline(&mut self.settings.microphone); });
+                ui.horizontal(|ui| { ui.label("Dictation shortcut"); ui.text_edit_singleline(&mut self.settings.hotkey); });
+                ui.checkbox(&mut self.settings.auto_paste, "Paste dictation into its original foreground application (off by default)");
+                ui.label("Dictation is copied automatically. Paste is skipped if focus changes or the destination is Siny.");
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Recognition language");
+                    egui::ComboBox::from_id_salt("language").selected_text(&self.settings.language).show_ui(ui, |ui| {
+                        for language in ["auto", "zh", "en", "yue", "ja", "ko"] { ui.selectable_value(&mut self.settings.language, language.into(), language); }
+                    });
+                    ui.label("Unload after idle seconds"); ui.add(egui::DragValue::new(&mut self.settings.idle_unload_seconds).range(1..=3600));
+                });
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Voice ID"); ui.add(egui::DragValue::new(&mut self.settings.voice).range(0..=53));
                     ui.label("Speed"); ui.add(egui::Slider::new(&mut self.settings.speed, 0.5..=2.0));
                     ui.label("Threads"); egui::ComboBox::from_id_salt("threads").selected_text(self.settings.threads.to_string()).show_ui(ui, |ui| { for n in [1,2,4] { ui.selectable_value(&mut self.settings.threads,n,n.to_string()); } });
                 });
-                if ui.add_enabled(idle, egui::Button::new("Save & apply")).clicked() {
-                    match self.settings.save(&self.base.join("config/siny.toml")).and_then(|()| make_scheduler(&self.base, &self.settings)) {
-                        Ok(scheduler) => { self.scheduler = Some(scheduler); self.status = "Settings saved · models load on demand".into(); }
-                        Err(e) => self.status = e,
+                ui.collapsing("Shared terminology · exact case-sensitive replacement", |ui| {
+                    let mut remove = None;
+                    for (index, term) in self.settings.terms.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(&mut term.from).hint_text("Recognized spelling").desired_width(180.0));
+                            ui.label("→");
+                            ui.add(egui::TextEdit::singleline(&mut term.to).hint_text("Preferred spelling").desired_width(180.0));
+                            if ui.button("Remove").clicked() { remove = Some(index); }
+                        });
                     }
-                }
-                ui.label("Shared terminology, language and idle timeout: config/siny.toml. Voice names: model voices.txt / notices.");
+                    if let Some(index) = remove { self.settings.terms.remove(index); }
+                    if ui.add_enabled(self.settings.terms.len() < 256, egui::Button::new("Add term")).clicked() {
+                        self.settings.terms.push(siny_core::terms::Term { from: String::new(), to: String::new() });
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    if ui.add_enabled(idle, egui::Button::new("Import TinySTT config…")).clicked() { self.import_settings(crate::migration::LegacyApp::TinyStt); }
+                    if ui.add_enabled(idle, egui::Button::new("Import TinyTTS config…")).clicked() { self.import_settings(crate::migration::LegacyApp::TinyTts); }
+                    if ui.add_enabled(idle, egui::Button::new("Save & apply")).clicked() { self.apply_settings(&ctx); }
+                });
+                ui.label("Settings changes remain a preview until Save & apply. Models reload on the next task; restart is unnecessary.");
             }
             ui.add_space(4.0);
             ui.small("Siny contributors · no warranty · AGPL-3.0-only; TinyTTS portions GPL-3.0-or-later.");
