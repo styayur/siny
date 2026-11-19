@@ -122,7 +122,10 @@ mod platform {
     use crate::error::{Result, TinySttError};
     use std::ptr;
     use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{
+        atomic::{AtomicBool, AtomicU32, Ordering},
+        Arc, Mutex, OnceLock,
+    };
     use std::thread;
     use std::time::Duration;
 
@@ -133,9 +136,9 @@ mod platform {
         GetAsyncKeyState, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetMessageW, PostThreadMessageW, SetWindowsHookExW,
-        TranslateMessage, UnhookWindowsHookEx, KBDLLHOOKSTRUCT, LLKHF_INJECTED, WH_KEYBOARD_LL,
-        WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
+        SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
+        PM_NOREMOVE, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
 
     struct HookRuntime {
@@ -144,35 +147,56 @@ mod platform {
         action_down: bool,
     }
 
-    static HOOK_RUNTIME: OnceLock<Mutex<HookRuntime>> = OnceLock::new();
+    static HOOK_RUNTIME: OnceLock<Mutex<Option<HookRuntime>>> = OnceLock::new();
 
     pub struct GlobalHotkey {
         rx: Receiver<HotkeyEvent>,
         thread_id: u32,
+        worker: Option<thread::JoinHandle<()>>,
     }
 
     impl GlobalHotkey {
         pub fn register(spec: HotkeySpec) -> Result<Self> {
             let (event_tx, event_rx) = mpsc::channel();
-            HOOK_RUNTIME
-                .set(Mutex::new(HookRuntime {
+            let slot = HOOK_RUNTIME.get_or_init(|| Mutex::new(None));
+            {
+                let mut runtime = slot.lock().map_err(|_| {
+                    TinySttError::HotkeyRegistration("hotkey state poisoned".into())
+                })?;
+                if runtime.is_some() {
+                    return Err(TinySttError::HotkeyRegistration(
+                        "a global hotkey is already registered".into(),
+                    ));
+                }
+                *runtime = Some(HookRuntime {
                     tx: event_tx,
                     spec,
                     action_down: false,
-                }))
-                .map_err(|_| {
-                    TinySttError::HotkeyRegistration(
-                        "a global hotkey is already registered".to_string(),
-                    )
-                })?;
+                });
+            }
 
             let (ready_tx, ready_rx) = mpsc::sync_channel(1);
-            thread::Builder::new()
+            let stop = Arc::new(AtomicBool::new(false));
+            let thread_id = Arc::new(AtomicU32::new(0));
+            let stopping = stop.clone();
+            let announced = thread_id.clone();
+            let worker = thread::Builder::new()
                 .name("tinystt-hotkey".to_string())
-                .spawn(move || run_hook_thread(ready_tx))
-                .map_err(|e| TinySttError::HotkeyRegistration(e.to_string()))?;
+                .spawn(move || run_hook_thread(ready_tx, stopping, announced))
+                .map_err(|e| {
+                    clear_runtime();
+                    TinySttError::HotkeyRegistration(e.to_string())
+                })?;
 
             let thread_id = ready_rx.recv_timeout(Duration::from_secs(5)).map_err(|_| {
+                stop.store(true, Ordering::Release);
+                let id = thread_id.load(Ordering::Acquire);
+                if id != 0 {
+                    // The worker publishes its ID only after creating its message queue.
+                    unsafe {
+                        let _ = PostThreadMessageW(id, WM_QUIT, 0, 0);
+                    }
+                }
                 TinySttError::HotkeyRegistration(
                     "timed out while starting the keyboard hook".to_string(),
                 )
@@ -186,6 +210,7 @@ mod platform {
             Ok(Self {
                 rx: event_rx,
                 thread_id,
+                worker: Some(worker),
             })
         }
 
@@ -199,27 +224,47 @@ mod platform {
             unsafe {
                 let _ = PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0);
             }
+            // Wait for unhook + runtime reset before a new registration can reuse the singleton.
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
         }
     }
 
-    fn run_hook_thread(ready: SyncSender<u32>) {
+    fn clear_runtime() {
+        if let Some(slot) = HOOK_RUNTIME.get() {
+            if let Ok(mut runtime) = slot.lock() {
+                *runtime = None;
+            }
+        }
+    }
+
+    fn run_hook_thread(ready: SyncSender<u32>, stop: Arc<AtomicBool>, announced: Arc<AtomicU32>) {
         unsafe {
             let hmod = GetModuleHandleW(ptr::null());
             let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), hmod, 0);
             if hook.is_null() {
+                clear_runtime();
                 let _ = ready.send(0);
                 return;
             }
-            let thread_id = GetCurrentThreadId();
-            let _ = ready.send(thread_id);
-
             let mut message = std::mem::zeroed();
+            // PeekMessage creates this thread's queue before the caller may post WM_QUIT.
+            let _ = PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_NOREMOVE);
+            let thread_id = GetCurrentThreadId();
+            announced.store(thread_id, Ordering::Release);
+            if ready.send(thread_id).is_err() || stop.load(Ordering::Acquire) {
+                let _ = UnhookWindowsHookEx(hook);
+                clear_runtime();
+                return;
+            }
             while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
             let _ = UnhookWindowsHookEx(hook);
         }
+        clear_runtime();
     }
 
     unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -229,6 +274,9 @@ mod platform {
                 let message = wparam as u32;
                 if let Some(runtime) = HOOK_RUNTIME.get() {
                     if let Ok(mut runtime) = runtime.lock() {
+                        let Some(runtime) = runtime.as_mut() else {
+                            return CallNextHookEx(ptr::null_mut(), code, wparam, lparam);
+                        };
                         let spec = runtime.spec.clone();
                         let key = event.vkCode as u16;
                         let key_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
@@ -302,5 +350,15 @@ mod tests {
     #[test]
     fn rejects_modifier_only_hotkeys() {
         assert!(HotkeySpec::parse("Ctrl+Alt").is_err());
+    }
+
+    #[cfg(all(windows, feature = "native"))]
+    #[test]
+    fn native_hook_can_be_dropped_and_registered_again() {
+        let first = GlobalHotkey::register(HotkeySpec::parse("Ctrl+Alt+D").unwrap()).unwrap();
+        assert!(GlobalHotkey::register(HotkeySpec::parse("Ctrl+Shift+D").unwrap()).is_err());
+        drop(first);
+        let second = GlobalHotkey::register(HotkeySpec::parse("Ctrl+Shift+D").unwrap()).unwrap();
+        drop(second);
     }
 }
