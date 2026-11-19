@@ -10,12 +10,15 @@ source trees and original native dependency archives. Verify SHA256SUMS.txt befo
 The native archive retains upstream source fixtures; no production SenseVoice/Kokoro pack,
 user input, captured audio or generated speech is supplied.
 
-Use Windows x64, MSVC C++ Build Tools, CMake 3.28 or newer, Git, Python 3.12 or newer and
+Use Windows x64, MSVC C++ Build Tools 14.51 or newer, CMake 3.28 or newer, Git, Python 3.12 or newer and
 current stable Rust. The recipe is `native/ort` and `scripts/native-security-build.ps1`.
 It combines the configured public ORT dependency graph and uses the static release CRT.
 The C API smoke target requires C++17. The release's native build evidence retains the
 actual CMake cache, source SHA, library hashes and numerical inference reports. Different
 compiler/runner revisions may produce different bytes; bit-identical rebuilds are not claimed.
+The supplied SDK was built with MSVC 14.51. Local MSVC 14.44 linking was observed to fail
+with unresolved newer `__std_*` runtime symbols; do not suppress those errors or replace
+the ABI to make that older toolchain appear accepted.
 
 The source archive intentionally excludes `.git` directories and checkout credentials.
 The recipe's identity check expects a Git checkout. Establish the same immutable upstream

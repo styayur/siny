@@ -31,7 +31,10 @@ Native ASR cannot be interrupted inside a decode; cancelled output is discarded 
 
 ## Build and verify
 
-Use stable MSVC Rust and Visual Studio C++ Build Tools on Windows 10/11 x64.
+Use stable MSVC Rust and Visual Studio C++ Build Tools on Windows x64. The supplied SDK
+requires MSVC 14.51 or newer (CI uses Visual Studio 2026); the older 14.44 C++ runtime
+cannot resolve its newer `__std_*` symbols. Running the portable app does not require
+the compiler. Windows 10 compatibility remains unverified on a physical machine.
 
 ```powershell
 python scripts/prepare_native.py
