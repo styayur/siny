@@ -3,10 +3,10 @@
 Lightweight native offline dictation and speech for Windows x64. SenseVoice recognizes;
 Kokoro reads. Both models remain separate and load only when requested.
 
-**Integration preview under validation.** This branch is not an accepted replacement
-for TinySTT/TinyTTS. Neither old repository is archived. See [acceptance](docs/acceptance.md).
+**Windows migration alpha.** Product migration is accepted against an exact released
+binary and its desktop/native verification, not a branch label. See [acceptance](docs/acceptance.md).
 The published [alpha.1](https://github.com/styayur/siny/releases/tag/v0.1.0-alpha.1)
-retains its qualified original bytes. Migration work for the next alpha follows the
+retains its qualified original bytes. Migration scope and acceptance follow the
 [product parity matrix](docs/parity-matrix.md).
 
 ## Use

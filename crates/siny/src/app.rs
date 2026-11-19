@@ -360,6 +360,7 @@ impl SinyApp {
 
     fn import_settings(&mut self, app: crate::migration::LegacyApp) {
         if let Some(path) = rfd::FileDialog::new()
+            .set_directory(self.base.join("config"))
             .add_filter("TOML configuration", &["toml"])
             .pick_file()
         {
@@ -486,12 +487,12 @@ impl eframe::App for SinyApp {
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(idle && !self.text.trim().is_empty(), egui::Button::new("Export speech WAV…")).clicked() {
                     // Incremental export uses the existing serial backend; no whole-document PCM buffer.
-                    if let Some(path) = rfd::FileDialog::new().add_filter("Wave audio", &["wav"]).set_file_name("siny.wav").save_file() {
+                    if let Some(path) = rfd::FileDialog::new().set_directory(&self.base).add_filter("Wave audio", &["wav"]).set_file_name("siny.wav").save_file() {
                         self.submit(Operation::ExportWav { text: self.text.clone(), path });
                     }
                 }
                 if ui.add_enabled(idle && self.last_recording.is_some(), egui::Button::new("Save debug recording…")).clicked() {
-                    if let Some(path) = rfd::FileDialog::new().add_filter("Wave audio", &["wav"]).set_file_name("siny-recording.wav").save_file() {
+                    if let Some(path) = rfd::FileDialog::new().set_directory(&self.base).add_filter("Wave audio", &["wav"]).set_file_name("siny-recording.wav").save_file() {
                         if let Some(audio) = &self.last_recording { self.status = match tinytts::audio::wav::write_wav(&path, &audio.samples, audio.sample_rate) { Ok(()) => "Debug recording saved explicitly".into(), Err(error) => error.to_string() }; }
                     }
                 }
