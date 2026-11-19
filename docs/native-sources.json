@@ -46,6 +46,11 @@
       "upstream_url": "https://codeload.github.com/microsoft/onnxruntime/tar.gz/refs/tags/v1.28.2",
       "tree_sha": "7841f821d01a42a4ae981810242278258898e61f",
       "signed_commit_proof": "docs/native-provenance/ort-commit.raw"
+    },
+    {
+      "name": "sherpa-source",
+      "url": "https://codeload.github.com/k2-fsa/sherpa-onnx/tar.gz/11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
+      "source_ref": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf"
     }
   ]
 }

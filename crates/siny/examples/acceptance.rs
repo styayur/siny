@@ -155,6 +155,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     report.unloaded = true;
     // Shared workflows go through the same production scheduler, including reverse verification.
     let scheduler = Scheduler::new(backend, settings)?;
+    let dictated = scheduler.submit(Operation::DictateThenRead(input.clone()))?;
+    let dictated = dictated.result.recv_timeout(Duration::from_secs(180))??;
+    assert!(dictated.text.to_lowercase().contains("tribal chieftain"));
+    assert!(dictated
+        .audio
+        .as_ref()
+        .is_some_and(|audio| audio.seconds() > 1.0));
+    let cancelled_asr = scheduler.submit(Operation::Dictate(input.clone()))?;
+    std::thread::sleep(Duration::from_millis(20));
+    cancelled_asr.cancel();
+    assert_eq!(
+        cancelled_asr
+            .result
+            .recv_timeout(Duration::from_secs(60))?
+            .unwrap_err(),
+        "Cancelled"
+    );
     let job = scheduler.submit(Operation::Verify("This is a local voice test.".into()))?;
     let outcome = job.result.recv_timeout(Duration::from_secs(180))??;
     assert!(

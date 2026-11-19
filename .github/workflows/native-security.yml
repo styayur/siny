@@ -2,7 +2,7 @@ name: Native runtime security rebuild
 on:
   push:
     branches: [codex/siny-unified-runtime]
-    paths: ['.github/workflows/native-security.yml', 'scripts/native-security-build.ps1', 'native/ort/**']
+    paths: ['.github/workflows/native-security.yml', 'scripts/native-security-build.ps1', 'native/ort/**', 'scripts/package_native.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,6 +37,21 @@ jobs:
           cargo build --locked --release -p siny --example acceptance
           cargo build --locked --release -p tinytts --example native_model_acceptance
           python scripts/check_acceptance.py
+      - name: Native source, licence and SDK packaging
+        run: python scripts/package_native.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-sdk-input
+          path: |
+            dist/native/siny-sherpa-1.13.8-ort-1.28.3-win-x64-static-MT.tar.bz2
+            dist/native/native-manifest.json
+            dist/native/SHA256SUMS.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-corresponding-source
+          path: dist/native/siny-corresponding-source.tar.gz
+          if-no-files-found: error
       - name: Retain source and build provenance
         if: always()
         shell: pwsh
