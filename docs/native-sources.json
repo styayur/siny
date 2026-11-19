@@ -38,10 +38,13 @@
     },
     {
       "name": "onnxruntime-source",
-      "url": "https://codeload.github.com/microsoft/onnxruntime/tar.gz/refs/tags/v1.28.2",
-      "source_ref": "v1.28.2",
+      "url": "https://codeload.github.com/ossia/onnxruntime/tar.gz/33ca9628233dc8f002435e868d4c2e9f82766ca1",
+      "source_ref": "33ca9628233dc8f002435e868d4c2e9f82766ca1",
       "repository": "https://github.com/microsoft/onnxruntime",
-      "required_for_release": true
+      "required_for_release": true,
+      "upstream_url": "https://codeload.github.com/microsoft/onnxruntime/tar.gz/refs/tags/v1.28.2",
+      "tree_sha": "7841f821d01a42a4ae981810242278258898e61f",
+      "signed_commit_proof": "docs/native-provenance/ort-commit.raw"
     }
   ]
 }

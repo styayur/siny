@@ -2,7 +2,7 @@ name: Native runtime security rebuild
 on:
   push:
     branches: [codex/siny-unified-runtime]
-    paths: ['.github/workflows/native-security.yml', 'scripts/native-security-build.ps1']
+    paths: ['.github/workflows/native-security.yml', 'scripts/native-security-build.ps1', 'native/ort/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,14 +17,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: csukuangfj/onnxruntime-build
-          ref: 23ec55ae5db21fb82be6c0f8a19365699137ecb7
-          path: .native-build/helper
-      - uses: actions/checkout@v4
-        with:
           repository: ossia/onnxruntime
           ref: 0d68ff6b3b72b04aac578decd6c4c45d322bb962
-          path: .native-build/helper/onnxruntime
+          path: .native-build/onnxruntime
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
@@ -47,8 +42,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force work/native-security | Out-Null
-          git -C .native-build/helper/onnxruntime rev-parse HEAD | Set-Content work/native-security/ort-commit.txt
-          git -C .native-build/helper rev-parse HEAD | Set-Content work/native-security/helper-commit.txt
+          git -C .native-build/onnxruntime rev-parse HEAD | Set-Content work/native-security/ort-commit.txt
           if (Test-Path .native-build/build/CMakeCache.txt) { Copy-Item .native-build/build/CMakeCache.txt work/native-security/ }
       - uses: actions/upload-artifact@v4
         if: always()
