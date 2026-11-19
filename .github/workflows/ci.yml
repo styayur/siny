@@ -50,6 +50,7 @@ jobs:
           cargo build --locked --release -p siny
           cargo build --locked --release -p siny --example acceptance
           cargo build --locked --release -p siny --example devices
+          cargo build --locked --release -p siny --example clipboard
           cargo build --locked --release -p tinytts --example native_model_acceptance
       - name: Explicitly prepare reviewed models
         run: |
@@ -79,5 +80,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-device-probe
-          path: target/release/examples/devices.exe
+          path: |
+            target/release/examples/devices.exe
+            target/release/examples/clipboard.exe
           if-no-files-found: error

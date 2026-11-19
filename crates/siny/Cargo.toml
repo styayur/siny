@@ -19,7 +19,7 @@ eframe = { workspace = true, optional = true }
 serde.workspace = true
 toml.workspace = true
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 [[bin]]
 name = "siny"
 path = "src/main.rs"
@@ -29,4 +29,8 @@ required-features = ["sherpa"]
 
 [[example]]
 name = "devices"
+required-features = ["gui"]
+
+[[example]]
+name = "clipboard"
 required-features = ["gui"]
