@@ -4,16 +4,16 @@
 //! Rust + sherpa-onnx + Kokoro.
 
 #![cfg_attr(
-    all(not(debug_assertions), feature = "native"),
+    all(not(debug_assertions), feature = "gui"),
     windows_subsystem = "windows"
 )]
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinytts::error::{Result, TinyTtsError};
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinytts::paths::Paths;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn run() -> Result<()> {
     use eframe::egui;
 
@@ -37,14 +37,14 @@ fn run() -> Result<()> {
     .map_err(|e| TinyTtsError::Gui(e.to_string()))
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn main() -> Result<()> {
     run()
 }
 
-#[cfg(not(feature = "native"))]
+#[cfg(not(feature = "gui"))]
 fn main() {
-    eprintln!("TinyTTS was compiled without the 'native' feature.");
+    eprintln!("TinyTTS was compiled without the 'gui' feature.");
     eprintln!("Run `cargo test --no-default-features` to execute the core unit tests,");
     eprintln!("or build the full GUI app with `cargo build --release` on Windows");
     eprintln!("with the MSVC Build Tools installed (see README.md).");

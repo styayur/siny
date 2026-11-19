@@ -4,12 +4,15 @@
 //! the audio player. Exactly one pipeline runs at a time; starting a new one
 //! stops the previous one.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+#[cfg(any(feature = "native", test))]
+use std::sync::{atomic::AtomicUsize, Mutex};
 
 #[cfg(feature = "native")]
 use std::thread::JoinHandle;
 
+#[cfg(any(feature = "native", test))]
 use crate::audio::queue::{self, ChunkSender};
 use crate::error::{Result, TinyTtsError};
 use crate::text_segmenter;

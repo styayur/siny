@@ -1,0 +1,9 @@
+sensevoice_dir = "models/sensevoice"
+kokoro_dir = "models/kokoro"
+threads = 2
+language = "auto"
+voice = 3
+speed = 1.0
+microphone = ""
+idle_unload_seconds = 60
+terms = []

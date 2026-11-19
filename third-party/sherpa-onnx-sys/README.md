@@ -1,0 +1,9 @@
+# sherpa-onnx-sys 1.13.8 ZIP build-dependency backport
+
+This is an explicitly local TinyTTS fork of the official Apache-2.0 crate, not a newer native engine release. `BACKPORT.json` records the verified crates.io archive identity and every original file digest; `LICENSE` and all FFI source files are preserved exactly.
+
+The package version is `1.13.8+tinytts.zip9.1`. The code/build changes are the ZIP build dependency from 2 to exactly 9.1.3, an explicit `UPSTREAM_NATIVE_VERSION = "1.13.8"` for native archive names/URLs, and returning `Result` from the build-script entry point instead of panicking. Invalid native inputs still cause a nonzero Cargo failure. The README describes this local fork; the unused original manifest, library lock and cargo archive metadata are omitted. The root application lock is authoritative. The sherpa API/FFI and package version are not upgraded or relabelled; the separately documented ORT implementation security patch does not change that ABI.
+
+The ZIP API occurs only in the upstream iOS XCFramework extraction branch. Siny Windows builds require an explicit qualified SDK path and disable automatic upstream downloads. That SDK retains the sherpa 1.13.8 ABI and twelve original libraries, including eSpeak fallback, while replacing onnxruntime.lib with source-built ORT 1.28.3. The original ORT 1.28.2 library is a build-bootstrap input only. See docs/native-sdk.json and native/ort for exact sources and hashes. Updating ZIP does not assert that Windows exposed the iOS extraction vulnerability or claim an iOS device test.
+
+Keep the root provenance test, native inference/cancellation/WAV acceptance, native input integrity checks and existing strict native build gates. Remove this fork only after an upstream supported dependency chain and full speech compatibility have been verified.

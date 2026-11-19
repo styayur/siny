@@ -3,7 +3,8 @@
 //! The modules here are split so the dependency-light core (text segmentation,
 //! settings, paths, WAV output and the TTS engine abstraction) can be built and
 //! tested without the GUI/native runtime. The `native` feature (on by default)
-//! enables the sherpa-onnx Kokoro engine, audio playback and the egui window.
+//! enables the sherpa-onnx Kokoro engine and audio playback. The default `gui`
+//! feature separately enables the egui window.
 
 pub mod audio;
 pub mod error;
@@ -14,9 +15,9 @@ pub mod settings;
 pub mod text_segmenter;
 pub mod tts;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 pub mod app;
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", test))]
 pub mod clipboard;
 #[cfg(feature = "native")]
 pub mod hotkey;

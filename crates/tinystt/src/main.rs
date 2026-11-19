@@ -4,28 +4,27 @@
 //! CLI: `TinySTT.exe --file test.wav`
 
 #![cfg_attr(
-    all(windows, not(debug_assertions), feature = "native"),
+    all(windows, not(debug_assertions), feature = "gui"),
     windows_subsystem = "windows"
 )]
 
-#[cfg(feature = "native")]
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use std::path::PathBuf;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinystt::asr::sensevoice::SenseVoiceRecognizer;
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinystt::asr::SpeechRecognizer;
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinystt::audio::read_wav_as_16k_mono;
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinystt::error::{Result, TinySttError};
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinystt::paths::Paths;
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 use tinystt::settings::Settings;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 enum Command {
     Gui,
     File {
@@ -38,7 +37,7 @@ enum Command {
     Version,
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if !args.is_empty() {
@@ -75,7 +74,7 @@ fn main() {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 const HELP: &str = "TinySTT - offline Windows speech-to-text
 
 Usage:
@@ -90,7 +89,7 @@ Options:
   -V, --version    Show the version.
 ";
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn parse_command(args: &[String]) -> std::result::Result<Command, String> {
     if args.is_empty() {
         return Ok(Command::Gui);
@@ -158,7 +157,7 @@ fn parse_command(args: &[String]) -> std::result::Result<Command, String> {
     })
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn run_cli(
     wav_path: PathBuf,
     model_dir: Option<String>,
@@ -202,7 +201,7 @@ fn run_cli(
     Ok(())
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn run_gui() -> Result<()> {
     let paths = Paths::from_exe()?;
     tinystt::log::init(&paths.log_file());
@@ -223,7 +222,7 @@ fn run_gui() -> Result<()> {
     .map_err(|error| TinySttError::Settings(format!("GUI failed: {error}")))
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn log_or_dialog(message: &str) {
     tinystt::log::error(format_args!("{message}"));
     #[cfg(windows)]
@@ -242,7 +241,7 @@ fn log_or_dialog(message: &str) {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 fn emit_line(text: &str, to_stderr: bool) {
     #[cfg(windows)]
     if emit_windows_line(text, to_stderr) {
@@ -256,7 +255,7 @@ fn emit_line(text: &str, to_stderr: bool) {
     }
 }
 
-#[cfg(all(windows, feature = "native"))]
+#[cfg(all(windows, feature = "gui"))]
 fn emit_windows_line(text: &str, to_stderr: bool) -> bool {
     use std::ptr;
     use windows_sys::Win32::Foundation::HANDLE;
@@ -287,7 +286,7 @@ fn emit_windows_line(text: &str, to_stderr: bool) -> bool {
     }
 }
 
-#[cfg(all(windows, feature = "native"))]
+#[cfg(all(windows, feature = "gui"))]
 fn attach_parent_console() {
     use windows_sys::Win32::System::Console::{
         AllocConsole, AttachConsole, GetStdHandle, SetConsoleOutputCP, ATTACH_PARENT_PROCESS,
@@ -303,9 +302,9 @@ fn attach_parent_console() {
     }
 }
 
-#[cfg(all(not(windows), feature = "native"))]
+#[cfg(all(not(windows), feature = "gui"))]
 fn attach_parent_console() {}
-#[cfg(not(feature = "native"))]
+#[cfg(not(feature = "gui"))]
 fn main() {
     eprintln!("TinySTT was compiled without the 'native' feature.");
     eprintln!("Run `cargo test --no-default-features` for core tests.");

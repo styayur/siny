@@ -494,10 +494,11 @@ impl TinySttApp {
 }
 
 impl eframe::App for TinySttApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.poll_background(ctx);
+    fn ui(&mut self, root_ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = root_ui.ctx().clone();
+        self.poll_background(&ctx);
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(root_ui, |ui| {
             ui.heading("TinySTT");
             ui.label("Tiny, offline speech-to-text for Windows.");
             ui.add_space(4.0);

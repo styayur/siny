@@ -1,0 +1,77 @@
+name: Siny validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Trust boundaries and native input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -m unittest discover -s tests
+          python scripts/prepare_native.py --github-env
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Backend and GUI feature boundaries
+        run: |
+          cargo check --locked -p siny --no-default-features --lib
+          cargo check --locked -p siny --no-default-features --features sherpa --lib
+      - name: Lint
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Tests
+        run: cargo test --locked --workspace --all-features
+      - name: Security, no advisory exclusions
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
+      - name: Release and native probes
+        run: |
+          cargo build --locked --release -p siny
+          cargo build --locked --release -p siny --example acceptance
+          cargo build --locked --release -p tinytts --example native_model_acceptance
+      - name: Explicitly prepare reviewed models
+        run: |
+          python scripts/prepare_model.py --github-env
+          python scripts/prepare_sensevoice.py --github-env
+      - name: Actual inference, cancellation, recovery and reverse recognition
+        env:
+          SINY_EXPECT_ORT_VERSION: 1.28.3
+        run: python scripts/check_acceptance.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-reports
+          path: |
+            work/acceptance/*.json
+            work/acceptance/*.toml
+            work/acceptance/*.log
+            work/model-acceptance/native-report.toml
+          if-no-files-found: warn
+      - name: Portable package, notices and corresponding application source
+        run: python scripts/package_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: dist/windows/*
+          if-no-files-found: error

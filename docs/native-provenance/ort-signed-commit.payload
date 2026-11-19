@@ -1,0 +1,17 @@
+tree 7841f821d01a42a4ae981810242278258898e61f
+parent cda0d761e5ebacfffb1621e612c797e777604c33
+author adrastogi <aditya.rastogi@microsoft.com> 1788370534 -0700
+committer GitHub <noreply@github.com> 1788370534 -0700
+
+ORT 1.28.2 Cherry Pick (#32363)
+
+This cherry-picks the following fix for the release:
+
+* #32303
+
+It also updates the ORT version guard to 1.28.2, completing the version
+bump required by the release branch.
+
+---------
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

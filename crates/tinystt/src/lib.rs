@@ -12,7 +12,7 @@ pub mod settings;
 pub mod state;
 pub mod tray;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 pub mod app;
-#[cfg(feature = "native")]
+#[cfg(feature = "gui")]
 pub mod pipeline;

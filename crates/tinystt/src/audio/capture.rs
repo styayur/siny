@@ -11,7 +11,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
 
 use crate::audio::buffer::RecordingBuffer;
-use crate::audio::convert::{downmix_interleaved, StreamingResampler};
+use crate::audio::convert::downmix_interleaved;
 use crate::audio::TARGET_SAMPLE_RATE;
 use crate::error::{Result, TinySttError};
 
@@ -43,13 +43,11 @@ impl AudioCapture {
     pub fn start(device_name: Option<&str>) -> Result<Self> {
         let host = cpal::default_host();
         let device = select_device(&host, device_name.unwrap_or_default())?;
-        let name = device
-            .name()
-            .unwrap_or_else(|_| "Unknown microphone".to_string());
+        let name = device.to_string();
         let supported = device
             .default_input_config()
             .map_err(|e| TinySttError::AudioDeviceUnavailable(format!("{name}: {e}")))?;
-        let sample_rate = supported.sample_rate().0;
+        let sample_rate = supported.sample_rate();
         let channels = supported.channels() as usize;
         let sample_format = supported.sample_format();
         let stream_config = supported.config();
@@ -154,11 +152,7 @@ fn select_device(host: &cpal::Host, requested_name: &str) -> Result<cpal::Device
         .input_devices()
         .map_err(|e| TinySttError::AudioDeviceUnavailable(e.to_string()))?;
     for device in devices {
-        if device
-            .name()
-            .map(|name| name.eq_ignore_ascii_case(requested_name))
-            .unwrap_or(false)
-        {
+        if device.to_string().eq_ignore_ascii_case(requested_name) {
             return Ok(device);
         }
     }
@@ -171,7 +165,7 @@ fn select_device(host: &cpal::Host, requested_name: &str) -> Result<cpal::Device
 pub fn input_device_names() -> Vec<String> {
     let host = cpal::default_host();
     match host.input_devices() {
-        Ok(devices) => devices.filter_map(|device| device.name().ok()).collect(),
+        Ok(devices) => devices.map(|device| device.to_string()).collect(),
         Err(_) => Vec::new(),
     }
 }
@@ -189,7 +183,7 @@ fn build_stream(
     event_tx: mpsc::Sender<CaptureEvent>,
 ) -> Result<cpal::Stream> {
     let error_tx = event_tx.clone();
-    let error_fn = move |error: cpal::StreamError| {
+    let error_fn = move |error: cpal::Error| {
         let _ = error_tx.send(CaptureEvent::Error(error.to_string()));
     };
 
@@ -199,13 +193,17 @@ fn build_stream(
             let callback_max = max_reached.clone();
             let callback_dropped = dropped_callbacks.clone();
             let callback_events = event_tx.clone();
-            let mut resampler = StreamingResampler::new(input_rate, TARGET_SAMPLE_RATE)?;
+            let resampler =
+                sherpa_onnx::LinearResampler::create(input_rate as i32, TARGET_SAMPLE_RATE as i32)
+                    .ok_or_else(|| {
+                        TinySttError::Resample("Cannot create bandlimited resampler".into())
+                    })?;
             device.build_input_stream(
-                config,
+                *config,
                 move |data: &[$sample], _| {
                     if let Ok(mut target) = callback_buffer.try_lock() {
                         let mono = downmix_interleaved(data, channels);
-                        let converted = resampler.process(&mono);
+                        let converted = resampler.resample(&mono, false);
                         let result = target.append(&converted);
                         if result.limit_reached && !callback_max.swap(true, Ordering::Relaxed) {
                             let _ = callback_events.send(CaptureEvent::MaxReached);

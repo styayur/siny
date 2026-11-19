@@ -12,31 +12,26 @@ rust-version = "1.85"
 name = "TinySTT"
 path = "src/main.rs"
 
-[patch.crates-io]
-# Build-dependency-only security backport; native 1.13.8 ABI is unchanged.
-sherpa-onnx-sys = { path = "third-party/sherpa-onnx-sys" }
-
 [features]
-default = ["native"]
-# The native feature enables the GUI, microphone capture, Windows integration,
+default = ["gui"]
+gui = ["native", "dep:eframe", "dep:tray-icon"]
+# The native feature enables microphone capture, Windows integration,
 # and sherpa-onnx. Disable it for dependency-light core unit tests.
 native = [
     "dep:cpal",
-    "dep:eframe",
     "dep:sherpa-onnx",
-    "dep:tray-icon",
     "dep:windows-sys",
 ]
 
 [dependencies]
 hound = "3.5"
-serde = { version = "1", features = ["derive"] }
-thiserror = "2"
-toml = "1.1"
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
 
-cpal = { version = "0.16", optional = true }
-eframe = { version = "0.31", optional = true }
-sherpa-onnx = { version = "1.13.8", optional = true }
+cpal = { workspace = true, optional = true }
+eframe = { workspace = true, optional = true }
+sherpa-onnx = { workspace = true, optional = true }
 tray-icon = { version = "0.26", default-features = false, optional = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -54,8 +49,3 @@ windows-sys = { version = "0.61", optional = true, features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
-[profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-strip = true

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "Apache-2.0",
+    "source": "https://github.com/spdx/license-list-data/blob/main/text/Apache-2.0.txt",
+    "git_blob_sha": "137069b823873b8bcf42979bcf8e9371052d26a2"
+  },
+  {
+    "id": "MPL-2.0",
+    "source": "https://github.com/spdx/license-list-data/blob/main/text/MPL-2.0.txt",
+    "git_blob_sha": "ee6256cdb62a765749a71aae3abea32884301cd1"
+  },
+  {
+    "id": "BSL-1.0",
+    "source": "https://github.com/spdx/license-list-data/blob/main/text/BSL-1.0.txt",
+    "git_blob_sha": "2d87ab1a9fa42781f9eec80c1d29e605ad313b85"
+  }
+]

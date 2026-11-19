@@ -1,0 +1,7 @@
+{
+  "commit_sha": "33ca9628233dc8f002435e868d4c2e9f82766ca1",
+  "tree_sha": "7841f821d01a42a4ae981810242278258898e61f",
+  "github_signature_verified": true,
+  "method": "Reconstructed Git commit bytes including GPG signature, SHA-1 commit object verification",
+  "source_repository": "ossia/onnxruntime"
+}
