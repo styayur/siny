@@ -6,6 +6,10 @@ on:
         description: Successful Siny validation main push run ID
         required: true
         type: string
+      desktop_acceptance:
+        description: Sanitized actual Windows acceptance JSON for the exact qualified binary
+        required: true
+        type: string
 permissions:
   contents: write
   actions: read
@@ -28,6 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           QUALIFICATION_RUN: ${{ inputs.qualification_run }}
+          SINY_DESKTOP_ACCEPTANCE: ${{ inputs.desktop_acceptance }}
         run: python scripts/release_windows.py --run $env:QUALIFICATION_RUN
       - uses: actions/upload-artifact@v4
         if: always()
@@ -37,4 +42,5 @@ jobs:
             work/release/*/SHA256SUMS.txt
             work/release/*/verification.json
             work/release/*/release-notes.md
+            work/release/*/desktop-acceptance.json
           if-no-files-found: warn

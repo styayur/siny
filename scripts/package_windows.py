@@ -9,7 +9,7 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = 'siny-v0.1.0-alpha.1-windows-x64'
+NAME = 'siny-v0.1.0-alpha.2-windows-x64'
 
 
 def digest(path):
@@ -29,6 +29,10 @@ def main():
         raise ValueError('Actual secure-runtime acceptance missing')
     if not all(report['siny'][key] for key in ['lazy_start', 'unloaded', 'cancelled', 'recovered']):
         raise ValueError('Lifecycle acceptance incomplete')
+    if (report['siny']['streamed_seconds'] <= 120 or not report['siny']['first_audio_before_completion']
+            or not report['siny']['stream_cancelled_recovered'] or report['siny']['model_voice_count'] != 54
+            or report['siny']['streamed_wav_frames'] <= 16000 or report['cli']['returncode'] != 0):
+        raise ValueError('Actual migration/streaming/CLI acceptance incomplete')
     command(['python', 'scripts/license_inventory.py'])
     dist = ROOT / 'dist/windows'
     dist.mkdir(parents=True, exist_ok=True)
@@ -52,6 +56,10 @@ language = "auto"
 voice = 3
 speed = 1.0
 microphone = ""
+hotkey = "Ctrl+Alt+D"
+auto_paste = false
+close_to_tray = true
+retain_recording = false
 idle_unload_seconds = 60
 terms = []
 ''', encoding='utf-8')
@@ -65,7 +73,7 @@ Native source SHA-256: ''' + native['source_sha256'] + '\nApplication commit: ' 
                     rustc=subprocess.check_output(['rustc', '-Vv'], text=True).strip(),
                     native_sdk_sha256=native['archive_sha256'], ort_version='1.28.3',
                     validation_run='https://github.com/styayur/siny/actions/runs/' + os.environ.get('GITHUB_RUN_ID', 'local'),
-                    acceptance=report, limits='Unsigned alpha; no legacy parity or human listening/WER claim. See docs/acceptance.md in source.')
+                    acceptance=report, limits='Unsigned alpha. Desktop/device acceptance is supplied separately for this exact binary before publication. No human listening/WER or broad hardware-coverage claim.')
     (portable / 'verification.json').write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
     with zipfile.ZipFile(dist / (NAME + '.zip'), 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(portable.rglob('*')):
