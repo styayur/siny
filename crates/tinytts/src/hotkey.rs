@@ -34,6 +34,7 @@ mod imp {
     pub struct GlobalHotkey {
         rx: Receiver<HotkeyEvent>,
         stop: Sender<()>,
+        worker: Option<thread::JoinHandle<()>>,
     }
 
     impl GlobalHotkey {
@@ -84,9 +85,11 @@ mod imp {
                 let _ = stop.send(());
                 return None;
             }
-            drop(spawned);
-
-            Some(Self { rx, stop })
+            Some(Self {
+                rx,
+                stop,
+                worker: Some(spawned),
+            })
         }
 
         pub fn try_recv(&self) -> Option<HotkeyEvent> {
@@ -97,6 +100,27 @@ mod imp {
     impl Drop for GlobalHotkey {
         fn drop(&mut self) {
             let _ = self.stop.send(());
+            // Release Ctrl+Alt+S before a replacement registration can start.
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::GlobalHotkey;
+
+        #[test]
+        fn clipboard_shortcut_can_be_registered_immediately_after_drop() {
+            for _ in 0..8 {
+                let shortcut = GlobalHotkey::register().expect("register Ctrl+Alt+S");
+                assert!(
+                    GlobalHotkey::register().is_none(),
+                    "a second owner cannot register Ctrl+Alt+S"
+                );
+                drop(shortcut);
+            }
         }
     }
 }
