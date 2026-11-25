@@ -14,14 +14,14 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: ossia/onnxruntime
           ref: 0d68ff6b3b72b04aac578decd6c4c45d322bb962
           path: .native-build/onnxruntime
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Build patched implementation, preserve sherpa 1.13.8 ABI
@@ -39,7 +39,7 @@ jobs:
           python scripts/check_acceptance.py
       - name: Native source, licence and SDK packaging
         run: python scripts/package_native.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-sdk-input
           path: |
@@ -47,7 +47,7 @@ jobs:
             dist/native/native-manifest.json
             dist/native/SHA256SUMS.txt
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-corresponding-source
           path: dist/native/siny-corresponding-source.tar.gz
@@ -59,7 +59,7 @@ jobs:
           New-Item -ItemType Directory -Force work/native-security | Out-Null
           git -C .native-build/onnxruntime rev-parse HEAD | Set-Content work/native-security/ort-commit.txt
           if (Test-Path .native-build/build/CMakeCache.txt) { Copy-Item .native-build/build/CMakeCache.txt work/native-security/ }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: native-security-evidence
