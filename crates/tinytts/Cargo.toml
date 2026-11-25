@@ -34,7 +34,7 @@ sherpa-onnx = { workspace = true, optional = true }
 # Keep the existing OpenGL renderer; 0.37 changes its default to WGPU.
 eframe = { workspace = true, optional = true }
 rodio = { workspace = true, optional = true }
-rfd = { version = "0.17", optional = true }
+rfd = { version = "0.18", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "=5.4.3", optional = true }
